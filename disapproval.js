@@ -246,6 +246,12 @@
   // Attach all inheritable methods to the Model prototype.
   _.extend(Model.prototype, Events, {
 
+    // If the model is in focus
+    is_highlighted: false,
+
+    // Threshold when model becomes in focus
+    threshold: 10,
+
     // A hash of attributes whose current and previous value differ.
     changed: null,
 
@@ -255,7 +261,10 @@
 
     // Initialize is an empty function by default. Override it with your own
     // initialization logic.
-    initialize: function () {},
+    initialize: function () {
+      this.listenTo(this.collection, 'render', this.render);
+      this.listenTo(this.collection, 'mousemove', this.checkFocus)
+    },
 
     // Return a copy of the model's `attributes` object.
     toJSON: function (options) {
@@ -404,8 +413,38 @@
     // A model is new if it has never been saved to the server, and lacks an id.
     isNew: function () {
       return !this.has(this.idAttribute);
-    }
+    },
 
+    // determine if the mouse is near the model
+    inRange: function (x, y) {
+      return (Math.abs(x - this.collection.chart.x_scale(this.get('x'))) < this.threshold && Math.abs(y - this.collection.chart.y_scale(this.get('y'))) < this.threshold);
+    },
+
+    checkFocus: function (event) {
+      var canvas_x = event.pageX - this.collection.chart.$canvas.offset().left;
+      var canvas_y = event.pageY - this.collection.chart.$canvas.offset().top;
+      if (this.inRange(canvas_x, canvas_y)) {
+        this.is_highlighted = true;
+      } else if (this.is_highlighted) {
+        this.is_highlighted = false;
+      }
+      this.render();
+    },
+
+    render: function () {
+      this.collection.chart.ctx.lineWidth = 1;
+      if (this.is_highlighted) {
+        this.collection.chart.ctx.fillStyle = this.collection.color.pointHighlightFill;
+        this.collection.chart.ctx.strokeStyle = this.collection.color.pointHighlightStroke;
+      } else {
+        this.collection.chart.ctx.fillStyle = this.collection.color.pointColor;
+        this.collection.chart.ctx.strokeStyle = this.collection.color.pointStrokeColor;
+      }
+      this.collection.chart.ctx.beginPath();
+      this.collection.chart.ctx.arc(this.collection.chart.x_scale(this.get('x')), this.collection.chart.y_scale(this.get('y')), 4, 0, 2 * Math.PI);
+      this.collection.chart.ctx.fill();
+      this.collection.chart.ctx.stroke();
+    }
   });
 
   // Underscore methods that we want to implement on the Model.
@@ -450,6 +489,14 @@
 
   // Define the Collection's inheritable methods.
   _.extend(Collection.prototype, Events, {
+
+    // Private method to reset all internal state. Called when the collection
+    // is first initialized or reset.
+    _reset: function () {
+      this.length = 0;
+      this.models = [];
+      this._byId  = {};
+    },
 
     // The default model for a collection is just a **Disapproval.Model**.
     // This should be overridden in most cases.
@@ -788,6 +835,210 @@
     };
   });
 
+  // Disapproval.Chart
+  // -------------------
+
+  // If models tend to represent a single row of data, a Disapproval Collection is
+  // more analogous to a table full of data ... or a small slice or page of that
+  // table, or a collection of rows that belong together for a particular reason
+  // -- all of the messages in this particular folder, all of the documents
+  // belonging to this particular author, and so on. Collections maintain
+  // indexes of their models, both in order, and for lookup by `id`.
+
+  // Create a new **Collection**, perhaps to contain a specific type of `model`.
+  // If a `comparator` is specified, the Collection will maintain
+  // its models in sort order, as they're added and removed.
+
+  var Chart = Disapproval.Chart = function (data, options) {
+    options || (options = {});
+    this._reset();
+    this.initialize.apply(this, arguments);
+    if (data) this.reset(data, _.extend({ silent: true }, options));
+    this.listenTo(Disapproval, 'window:shrink', this._shrink);
+    this.listenTo(Disapproval, 'window:grow', this._grow);
+    this.listenTo(Disapproval, 'window:set_size', this._setSize);
+    this.listenTo(Disapproval, 'window:render', this.render);
+
+    // break apart resizing into steps so that all chart instances can execute each step together
+    // before going on to the next
+    Disapproval.trigger('window:shrink');
+    Disapproval.trigger('window:grow');
+    Disapproval.trigger('window:set_size');
+    Disapproval.trigger('window:render');
+  };
+
+  _.extend(Chart.prototype, Events, {
+
+    _reset: function () {
+      this.datasets = [];
+      this.bounds = { x_min: 0, x_max: 0, y_min: 0, y_max: 0 };
+      if (!this.$el) {
+        this.$el = $(this.el);
+        this.$container = $('<div>', { class: 'disapproval-canvas-container' }).appendTo(this.$el);
+        this.$canvas = $('<canvas>').appendTo(this.$container);
+        this.ctx = this.$canvas[0].getContext('2d');
+        this.$canvas.on('mousemove', $.proxy( function (event) {
+          _.each(this.datasets, function (dataset) {
+            dataset.trigger('mousemove', event);
+          }, this)
+        }, this));
+      }
+    },
+
+    reset: function (data, options) {
+      options || (options = {});
+      this._reset();
+      var color_palette = data.datasets.length > 10 ? this.color_palette_20 : this.color_palette_10;
+      this.datasets = _.map(data.datasets, function (dataset, i) {
+        var points = _.map(dataset.x, function (x, j) {
+            return {
+                x: dataset.x[j],
+                y: dataset.y[j],
+                meta: dataset.meta[j]
+            };
+        });
+        var dataset_collection = new Disapproval.Collection(points);
+        dataset_collection.color = this.lineChartColoring(i, color_palette);
+        dataset_collection.chart = this;
+        return dataset_collection;
+      }, this);
+      this._setBounds();
+      if (!options.silent) this.trigger('reset', this, options);
+      return this;
+    },
+
+    _setBounds: function () {
+      // TODO: this could be optimized, especially for fixed x-range
+      _.each(this.datasets, function (dataset) {
+        var x_min = _.min(dataset.pluck('x'));
+        var x_max = _.max(dataset.pluck('x'));
+        var y_min = _.min(dataset.pluck('y'));
+        var y_max = _.max(dataset.pluck('y'));
+        if ( x_min < this.bounds.x_min) this.bounds.x_min = x_min;
+        if ( x_max > this.bounds.x_max) this.bounds.x_max = x_max;
+        if ( y_min < this.bounds.y_min) this.bounds.y_min = y_min;
+        if ( y_max > this.bounds.y_max) this.bounds.y_max = y_max;
+      }, this);
+    },
+
+    _shrink: function () {
+      this.$canvas.attr({ width: 0, height: 0 });
+    },
+
+    _grow: function () {
+      this.$container.height(Math.round(this.$container.width() / this.aspect_ratio));
+    },
+
+    _setSize: function () {
+      this.canvas_width = this.$container.width();
+      this.canvas_height = this.$container.height();
+      this.$canvas.attr({
+        width: this.canvas_width,
+        height: this.canvas_height
+      });
+    },
+
+    // defaults
+    el: 'body',
+    aspect_ratio: 16 / 9,
+
+    x_scale: function (x) {
+      return x * this.canvas_width / (this.bounds.x_max - this.bounds.x_min);
+    },
+
+    y_scale: function (y) {
+      return this.canvas_height - y * this.canvas_height / (this.bounds.y_max - this.bounds.y_min);
+    },
+
+    render: function () {
+      this.ctx.lineWidth = 2;
+
+      _.each(this.datasets, function (dataset) {
+          this.ctx.beginPath();
+          this.ctx.strokeStyle = dataset.color.strokeColor;
+          dataset.each(function (point, i) {
+              if (i == 0) {
+                  this.ctx.moveTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
+              } else {
+                  this.ctx.lineTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
+              }
+          }, this);
+          this.ctx.stroke();
+          dataset.trigger('render');
+      }, this);
+    },
+
+    initialize: function () {},
+
+    color_palette_10: [
+      '151,187,205',
+      '255,127,14',
+      '44,160,44',
+      '214,39,40',
+      '148,103,189',
+      '140,86,75',
+      '227,119,194',
+      '127,127,127',
+      '188,189,34',
+      '23,190,207'
+    ],
+
+    color_palette_20: [
+      '151,187,205',
+      '31,119,180',
+      '255,127,14',
+      '255,187,120',
+      '44,160,44',
+      '152,223,138',
+      '214,39,40',
+      '255,152,150',
+      '148,103,189',
+      '197,176,213',
+      '140,86,75',
+      '196,156,148',
+      '227,119,194',
+      '247,182,210',
+      '127,127,127',
+      '199,199,199',
+      '188,189,34',
+      '219,219,141',
+      '23,190,207',
+      '158,218,229'
+    ],
+
+    lineChartColoring: function (i, color_palette) {
+        i = i % color_palette.length;
+        return {
+            fillColor: 'rgba(' + color_palette[i] + ',0.2)',
+            strokeColor: 'rgba(' + color_palette[i] + ',1)',
+            pointColor: 'rgba(' + color_palette[i] + ',1)',
+            pointStrokeColor: "#fff",
+            pointHighlightFill: "#fff",
+            pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
+        };
+    },
+
+    barChartColoring: function (i, color_palette) {
+        i = i % color_palette.length;
+        return {
+            fillColor: 'rgba(' + color_palette[i] + ',0.65)',
+            strokeColor: 'rgba(' + color_palette[i] + ',0.9)',
+            highlightFill: 'rgba(' + color_palette[i] + ',0.8)',
+            highlightStroke: 'rgba(' + color_palette[i] + ',1)',
+        };
+    }
+  });
+
+
+
+
+
+
+
+
+
+
+
 
   // Helpers
   // -------
@@ -829,8 +1080,14 @@
   };
 
   // Set up inheritance for the model, collection.
-  Model.extend = Collection.extend = extend;
+  Model.extend = Collection.extend = Chart.extend = extend;
 
+  $(window).resize(_.debounce(function () {
+    Disapproval.trigger('window:shrink');
+    Disapproval.trigger('window:grow');
+    Disapproval.trigger('window:set_size');
+    Disapproval.trigger('window:render');
+  }, 300));
 
   return Disapproval;
 
