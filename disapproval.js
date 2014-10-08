@@ -241,6 +241,8 @@
     this.set(attrs, options);
     this.changed = {};
     this.initialize.apply(this, arguments);
+    this.listenTo(this.collection, 'render', this.render);
+    this.listenTo(this.collection, 'mousemove', this.checkFocus);
   };
 
   // Attach all inheritable methods to the Model prototype.
@@ -261,10 +263,7 @@
 
     // Initialize is an empty function by default. Override it with your own
     // initialization logic.
-    initialize: function () {
-      this.listenTo(this.collection, 'render', this.render);
-      this.listenTo(this.collection, 'mousemove', this.checkFocus)
-    },
+    initialize: function () {},
 
     // Return a copy of the model's `attributes` object.
     toJSON: function (options) {
@@ -853,22 +852,20 @@
     options || (options = {});
     this._reset();
     this.initialize.apply(this, arguments);
-    if (data) this.reset(data, _.extend({ silent: true }, options));
     this.listenTo(Disapproval, 'window:shrink', this._shrink);
     this.listenTo(Disapproval, 'window:grow', this._grow);
     this.listenTo(Disapproval, 'window:set_size', this._setSize);
     this.listenTo(Disapproval, 'window:render', this.render);
-
-    // break apart resizing into steps so that all chart instances can execute each step together
-    // before going on to the next
-    Disapproval.trigger('window:shrink');
-    Disapproval.trigger('window:grow');
-    Disapproval.trigger('window:set_size');
-    Disapproval.trigger('window:render');
+    if (data) this.reset(data, _.extend({ silent: true }, options));
   };
 
   _.extend(Chart.prototype, Events, {
 
+    // defaults
+    el: 'body',
+    aspect_ratio: 16 / 9,
+
+    // private methods
     _reset: function () {
       this.datasets = [];
       this.bounds = { x_min: 0, x_max: 0, y_min: 0, y_max: 0 };
@@ -883,28 +880,6 @@
           }, this)
         }, this));
       }
-    },
-
-    reset: function (data, options) {
-      options || (options = {});
-      this._reset();
-      var color_palette = data.datasets.length > 10 ? this.color_palette_20 : this.color_palette_10;
-      this.datasets = _.map(data.datasets, function (dataset, i) {
-        var points = _.map(dataset.x, function (x, j) {
-            return {
-                x: dataset.x[j],
-                y: dataset.y[j],
-                meta: dataset.meta[j]
-            };
-        });
-        var dataset_collection = new Disapproval.Collection(points);
-        dataset_collection.color = this.lineChartColoring(i, color_palette);
-        dataset_collection.chart = this;
-        return dataset_collection;
-      }, this);
-      this._setBounds();
-      if (!options.silent) this.trigger('reset', this, options);
-      return this;
     },
 
     _setBounds: function () {
@@ -926,6 +901,9 @@
     },
 
     _grow: function () {
+      // set height of container
+      this.$container.height(Math.round(this.$container.width() / this.aspect_ratio));
+      // reset height with possibly updated width from scrollbar being added to screen
       this.$container.height(Math.round(this.$container.width() / this.aspect_ratio));
     },
 
@@ -938,9 +916,34 @@
       });
     },
 
-    // defaults
-    el: 'body',
-    aspect_ratio: 16 / 9,
+    // public methods
+    reset: function (data, options) {
+      options || (options = {});
+      this._reset();
+      var color_palette = data.datasets.length > 10 ? this.color_palette_20 : this.color_palette_10;
+      this.datasets = _.map(data.datasets, function (dataset, i) {
+        var points = _.map(dataset.x, function (x, j) {
+          return {
+            x: dataset.x[j],
+            y: dataset.y[j],
+            meta: dataset.meta[j]
+          };
+        });
+        var dataset_collection = new Disapproval.Collection(points);
+        dataset_collection.color = this.lineChartColoring(i, color_palette);
+        dataset_collection.chart = this;
+        return dataset_collection;
+      }, this);
+      this._setBounds();
+      if (!options.silent) this.trigger('reset', this, options);
+      // break apart resizing into steps so that all chart instances can execute each step together
+      // before going on to the next
+      Disapproval.trigger('window:shrink');
+      Disapproval.trigger('window:grow');
+      Disapproval.trigger('window:set_size');
+      Disapproval.trigger('window:render');
+      return this;
+    },
 
     x_scale: function (x) {
       return x * this.canvas_width / (this.bounds.x_max - this.bounds.x_min);
@@ -957,11 +960,11 @@
           this.ctx.beginPath();
           this.ctx.strokeStyle = dataset.color.strokeColor;
           dataset.each(function (point, i) {
-              if (i == 0) {
-                  this.ctx.moveTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
-              } else {
-                  this.ctx.lineTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
-              }
+            if (i == 0) {
+              this.ctx.moveTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
+            } else {
+              this.ctx.lineTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
+            }
           }, this);
           this.ctx.stroke();
           dataset.trigger('render');
