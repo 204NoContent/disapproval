@@ -241,18 +241,10 @@
     this.set(attrs, options);
     this.changed = {};
     this.initialize.apply(this, arguments);
-    this.listenTo(this.collection, 'render', this.render);
-    this.listenTo(this.collection, 'mousemove', this.checkFocus);
   };
 
   // Attach all inheritable methods to the Model prototype.
   _.extend(Model.prototype, Events, {
-
-    // If the model is in focus
-    is_highlighted: false,
-
-    // Threshold when model becomes in focus
-    threshold: 10,
 
     // A hash of attributes whose current and previous value differ.
     changed: null,
@@ -412,37 +404,6 @@
     // A model is new if it has never been saved to the server, and lacks an id.
     isNew: function () {
       return !this.has(this.idAttribute);
-    },
-
-    // determine if the mouse is near the model
-    inRange: function (x, y) {
-      return (Math.abs(x - this.collection.chart.x_scale(this.get('x'))) < this.threshold && Math.abs(y - this.collection.chart.y_scale(this.get('y'))) < this.threshold);
-    },
-
-    checkFocus: function (event) {
-      var canvas_x = event.pageX - this.collection.chart.$canvas.offset().left;
-      var canvas_y = event.pageY - this.collection.chart.$canvas.offset().top;
-      if (this.inRange(canvas_x, canvas_y)) {
-        this.is_highlighted = true;
-      } else if (this.is_highlighted) {
-        this.is_highlighted = false;
-      }
-      this.render();
-    },
-
-    render: function () {
-      this.collection.chart.ctx.lineWidth = 1;
-      if (this.is_highlighted) {
-        this.collection.chart.ctx.fillStyle = this.collection.color.pointHighlightFill;
-        this.collection.chart.ctx.strokeStyle = this.collection.color.pointHighlightStroke;
-      } else {
-        this.collection.chart.ctx.fillStyle = this.collection.color.pointColor;
-        this.collection.chart.ctx.strokeStyle = this.collection.color.pointStrokeColor;
-      }
-      this.collection.chart.ctx.beginPath();
-      this.collection.chart.ctx.arc(this.collection.chart.x_scale(this.get('x')), this.collection.chart.y_scale(this.get('y')), 4, 0, 2 * Math.PI);
-      this.collection.chart.ctx.fill();
-      this.collection.chart.ctx.stroke();
     }
   });
 
@@ -834,6 +795,138 @@
     };
   });
 
+  // Disapproval.View
+  // -------------
+
+  // Disapproval Views are almost more convention than they are actual code. A View
+  // is simply a JavaScript object that represents a logical chunk of UI in the
+  // DOM. This might be a single item, an entire list, a sidebar or panel, or
+  // even the surrounding frame which wraps your whole app. Defining a chunk of
+  // UI as a **View** allows you to define your DOM events declaratively, without
+  // having to worry about render order ... and makes it easy for the view to
+  // react to specific changes in the state of your models.
+
+  // Creating a Disapproval.View creates its initial element outside of the DOM,
+  // if an existing element is not provided...
+  var View = Disapproval.View = function(options) {
+    this.cid = _.uniqueId('view');
+    options || (options = {});
+    _.extend(this, _.pick(options, viewOptions));
+    this._ensureElement();
+    this.initialize.apply(this, arguments);
+    this.delegateEvents();
+  };
+
+  // Cached regex to split keys for `delegate`.
+  var delegateEventSplitter = /^(\S+)\s*(.*)$/;
+
+  // List of view options to be merged as properties.
+  var viewOptions = ['model', 'collection', 'el', 'id', 'attributes', 'className', 'tagName', 'events'];
+
+  // Set up all inheritable **Disapproval.View** properties and methods.
+  _.extend(View.prototype, Events, {
+
+    // The default `tagName` of a View's element is `"svg"`.
+    tagName: 'svg',
+
+    // jQuery delegate for element lookup, scoped to DOM elements within the
+    // current view. This should be preferred to global lookups where possible.
+    $: function(selector) {
+      return this.$el.find(selector);
+    },
+
+    // Initialize is an empty function by default. Override it with your own
+    // initialization logic.
+    initialize: function(){},
+
+    // **render** is the core function that your view should override, in order
+    // to populate its element (`this.el`), with the appropriate HTML. The
+    // convention is for **render** to always return `this`.
+    render: function() {
+      return this;
+    },
+
+    // Remove this view by taking the element out of the DOM, and removing any
+    // applicable Disapproval.Events listeners.
+    remove: function() {
+      this.$el.remove();
+      this.stopListening();
+      return this;
+    },
+
+    // Change the view's element (`this.el` property), including event
+    // re-delegation.
+    setElement: function(element, delegate) {
+      if (this.$el) this.undelegateEvents();
+      this.$el = element instanceof Disapproval.$ ? element : Disapproval.$(element);
+      this.el = this.$el[0];
+      if (delegate !== false) this.delegateEvents();
+      return this;
+    },
+
+    // Set callbacks, where `this.events` is a hash of
+    //
+    // *{"event selector": "callback"}*
+    //
+    //     {
+    //       'mousedown .title':  'edit',
+    //       'click .button':     'save',
+    //       'click .open':       function(e) { ... }
+    //     }
+    //
+    // pairs. Callbacks will be bound to the view, with `this` set properly.
+    // Uses event delegation for efficiency.
+    // Omitting the selector binds the event to `this.el`.
+    // This only works for delegate-able events: not `focus`, `blur`, and
+    // not `change`, `submit`, and `reset` in Internet Explorer.
+    delegateEvents: function(events) {
+      if (!(events || (events = _.result(this, 'events')))) return this;
+      this.undelegateEvents();
+      for (var key in events) {
+        var method = events[key];
+        if (!_.isFunction(method)) method = this[events[key]];
+        if (!method) continue;
+
+        var match = key.match(delegateEventSplitter);
+        var eventName = match[1], selector = match[2];
+        method = _.bind(method, this);
+        eventName += '.delegateEvents' + this.cid;
+        if (selector === '') {
+          this.$el.on(eventName, method);
+        } else {
+          this.$el.on(eventName, selector, method);
+        }
+      }
+      return this;
+    },
+
+    // Clears all callbacks previously bound to the view with `delegateEvents`.
+    // You usually don't need to use this, but may wish to if you have multiple
+    // Disapproval views attached to the same DOM element.
+    undelegateEvents: function() {
+      this.$el.off('.delegateEvents' + this.cid);
+      return this;
+    },
+
+    // Ensure that the View has a DOM element to render into.
+    // If `this.el` is a string, pass it through `$()`, take the first
+    // matching element, and re-assign it to `el`. Otherwise, create
+    // an element from the `id`, `className` and `tagName` properties.
+    _ensureElement: function() {
+      if (!this.el) {
+        var attrs = _.extend({}, _.result(this, 'attributes'));
+        if (this.id) attrs.id = _.result(this, 'id');
+        if (this.className) attrs['class'] = _.result(this, 'className');
+
+        var $el = Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', _.result(this, 'tagName'))).attr(attrs);
+        this.setElement($el, false);
+      } else {
+        this.setElement(_.result(this, 'el'), false);
+      }
+    }
+
+  });
+
   // Disapproval.Chart
   // -------------------
 
@@ -849,37 +942,50 @@
   // its models in sort order, as they're added and removed.
 
   var Chart = Disapproval.Chart = function (data, options) {
+    this.cid = _.uniqueId('view');
     options || (options = {});
+    _.extend(this, _.pick(options, chartOptions));
+    this._createElement();
     this._reset();
     this.initialize.apply(this, arguments);
     this.listenTo(Disapproval, 'window:shrink', this._shrink);
     this.listenTo(Disapproval, 'window:grow', this._grow);
     this.listenTo(Disapproval, 'window:set_size', this._setSize);
-    this.listenTo(Disapproval, 'window:render', this.render);
+    this.listenTo(Disapproval, 'window:set_threshold', this._setThreshold);
     if (data) this.reset(data, _.extend({ silent: true }, options));
+    this.delegateEvents();
+    this.render();
   };
 
-  _.extend(Chart.prototype, Events, {
+  // List of chart options to be merged as properties.
+  var chartOptions = ['container', 'el', 'id', 'attributes', 'className', 'tagName', 'events'];
 
-    // defaults
-    el: 'body',
-    aspect_ratio: 16 / 9,
+  _.extend(Chart.prototype, View.prototype, {
+    aspectRatio: 16 / 9,
+    container: 'body',
 
-    // private methods
+    events: {
+      'mousemove': '_triggerMouseMove'
+    },
+
+    _triggerMouseMove: function (e) {
+      var offset = this.$el.offset();
+      Disapproval.trigger('chart:mousemove', {
+        x: e.pageX - offset.left,
+        y: e.pageY - offset.top
+      });
+    },
+
+    _createElement: function () {
+      this.$container = $(this.container);
+      this.$container.append('<svg ' + 'class=' + this.cid + '></svg>');
+      this.$el = this.$container.find('svg.' + this.cid);
+      this.$el.appendTo(this.$container);
+    },
+
     _reset: function () {
       this.datasets = [];
       this.bounds = { x_min: 0, x_max: 0, y_min: 0, y_max: 0 };
-      if (!this.$el) {
-        this.$el = $(this.el);
-        this.$container = $('<div>', { class: 'disapproval-canvas-container' }).appendTo(this.$el);
-        this.$canvas = $('<canvas>').appendTo(this.$container);
-        this.ctx = this.$canvas[0].getContext('2d');
-        this.$canvas.on('mousemove', $.proxy( function (event) {
-          _.each(this.datasets, function (dataset) {
-            dataset.trigger('mousemove', event);
-          }, this)
-        }, this));
-      }
     },
 
     _setBounds: function () {
@@ -896,23 +1002,28 @@
       }, this);
     },
 
+    _setThreshold: function () {
+      var max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
+      this.threshold = this.width / max_points / 2;
+    },
+
     _shrink: function () {
-      this.$canvas.attr({ width: 0, height: 0 });
+      this.$el.attr({ width: 0, height: 0 });
     },
 
     _grow: function () {
       // set height of container
-      this.$container.height(Math.round(this.$container.width() / this.aspect_ratio));
+      this.$container.height(Math.round(this.$container.width() / this.aspectRatio));
       // reset height with possibly updated width from scrollbar being added to screen
-      this.$container.height(Math.round(this.$container.width() / this.aspect_ratio));
+      this.$container.height(Math.round(this.$container.width() / this.aspectRatio));
     },
 
     _setSize: function () {
-      this.canvas_width = this.$container.width();
-      this.canvas_height = this.$container.height();
-      this.$canvas.attr({
-        width: this.canvas_width,
-        height: this.canvas_height
+      this.width = this.$container.width();
+      this.height = this.$container.height();
+      this.$el.attr({
+        width: this.width,
+        height: this.height
       });
     },
 
@@ -920,7 +1031,7 @@
     reset: function (data, options) {
       options || (options = {});
       this._reset();
-      var color_palette = data.datasets.length > 10 ? this.color_palette_20 : this.color_palette_10;
+      var color_palette = data.datasets.length > 10 ? color_palette_20 : color_palette_10;
       this.datasets = _.map(data.datasets, function (dataset, i) {
         var points = _.map(dataset.x, function (x, j) {
           return {
@@ -930,7 +1041,8 @@
           };
         });
         var dataset_collection = new Disapproval.Collection(points);
-        dataset_collection.color = this.lineChartColoring(i, color_palette);
+        dataset_collection.name = dataset.name;
+        dataset_collection.color = lineChartColoring(i, color_palette);
         dataset_collection.chart = this;
         return dataset_collection;
       }, this);
@@ -941,102 +1053,39 @@
       Disapproval.trigger('window:shrink');
       Disapproval.trigger('window:grow');
       Disapproval.trigger('window:set_size');
+      Disapproval.trigger('window:set_threshold');
       Disapproval.trigger('window:render');
       return this;
     },
 
     x_scale: function (x) {
-      return x * this.canvas_width / (this.bounds.x_max - this.bounds.x_min);
+      return x * this.width / (this.bounds.x_max - this.bounds.x_min);
     },
 
     y_scale: function (y) {
-      return this.canvas_height - y * this.canvas_height / (this.bounds.y_max - this.bounds.y_min);
+      return this.height - y * this.height / (this.bounds.y_max - this.bounds.y_min);
     },
 
     render: function () {
-      this.ctx.lineWidth = 2;
-
       _.each(this.datasets, function (dataset) {
-          this.ctx.beginPath();
-          this.ctx.strokeStyle = dataset.color.strokeColor;
-          dataset.each(function (point, i) {
-            if (i == 0) {
-              this.ctx.moveTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
-            } else {
-              this.ctx.lineTo(this.x_scale(point.get('x')), this.y_scale(point.get('y')));
-            }
-          }, this);
-          this.ctx.stroke();
-          dataset.trigger('render');
+        var line_view = new LineView({
+          collection: dataset
+        });
+
+        this.$el.append(line_view.$el);
+
+        dataset.each(function (point) {
+          var point_view = new PointView({
+            model: point
+          });
+
+          this.$el.append(point_view.$el);
+        }, this);
       }, this);
     },
 
-    initialize: function () {},
-
-    color_palette_10: [
-      '151,187,205',
-      '255,127,14',
-      '44,160,44',
-      '214,39,40',
-      '148,103,189',
-      '140,86,75',
-      '227,119,194',
-      '127,127,127',
-      '188,189,34',
-      '23,190,207'
-    ],
-
-    color_palette_20: [
-      '151,187,205',
-      '31,119,180',
-      '255,127,14',
-      '255,187,120',
-      '44,160,44',
-      '152,223,138',
-      '214,39,40',
-      '255,152,150',
-      '148,103,189',
-      '197,176,213',
-      '140,86,75',
-      '196,156,148',
-      '227,119,194',
-      '247,182,210',
-      '127,127,127',
-      '199,199,199',
-      '188,189,34',
-      '219,219,141',
-      '23,190,207',
-      '158,218,229'
-    ],
-
-    lineChartColoring: function (i, color_palette) {
-        i = i % color_palette.length;
-        return {
-            fillColor: 'rgba(' + color_palette[i] + ',0.2)',
-            strokeColor: 'rgba(' + color_palette[i] + ',1)',
-            pointColor: 'rgba(' + color_palette[i] + ',1)',
-            pointStrokeColor: "#fff",
-            pointHighlightFill: "#fff",
-            pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
-        };
-    },
-
-    barChartColoring: function (i, color_palette) {
-        i = i % color_palette.length;
-        return {
-            fillColor: 'rgba(' + color_palette[i] + ',0.65)',
-            strokeColor: 'rgba(' + color_palette[i] + ',0.9)',
-            highlightFill: 'rgba(' + color_palette[i] + ',0.8)',
-            highlightStroke: 'rgba(' + color_palette[i] + ',1)',
-        };
-    }
+    initialize: function () {}
   });
-
-
-
-
-
-
 
 
 
@@ -1083,14 +1132,165 @@
   };
 
   // Set up inheritance for the model, collection.
-  Model.extend = Collection.extend = Chart.extend = extend;
+  Model.extend = Collection.extend = View.extend = Chart.extend = extend;
 
   $(window).resize(_.debounce(function () {
     Disapproval.trigger('window:shrink');
     Disapproval.trigger('window:grow');
     Disapproval.trigger('window:set_size');
+    Disapproval.trigger('window:set_threshold');
     Disapproval.trigger('window:render');
   }, 300));
+
+  var color_palette_10 = [
+    '151,187,205',
+    '255,127,14',
+    '44,160,44',
+    '214,39,40',
+    '148,103,189',
+    '140,86,75',
+    '227,119,194',
+    '127,127,127',
+    '188,189,34',
+    '23,190,207'
+  ];
+
+  var color_palette_20 = [
+    '151,187,205',
+    '31,119,180',
+    '255,127,14',
+    '255,187,120',
+    '44,160,44',
+    '152,223,138',
+    '214,39,40',
+    '255,152,150',
+    '148,103,189',
+    '197,176,213',
+    '140,86,75',
+    '196,156,148',
+    '227,119,194',
+    '247,182,210',
+    '127,127,127',
+    '199,199,199',
+    '188,189,34',
+    '219,219,141',
+    '23,190,207',
+    '158,218,229'
+  ];
+
+  function lineChartColoring(i, color_palette) {
+    i = i % color_palette.length;
+    return {
+      fillColor: 'rgba(' + color_palette[i] + ',0.2)',
+      strokeColor: 'rgba(' + color_palette[i] + ',1)',
+      pointColor: 'rgba(' + color_palette[i] + ',1)',
+      pointStrokeColor: "#fff",
+      pointHighlightFill: "#fff",
+      pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
+    };
+  }
+
+  function barChartColoring(i, color_palette) {
+    i = i % color_palette.length;
+    return {
+      fillColor: 'rgba(' + color_palette[i] + ',0.65)',
+      strokeColor: 'rgba(' + color_palette[i] + ',0.9)',
+      highlightFill: 'rgba(' + color_palette[i] + ',0.8)',
+      highlightStroke: 'rgba(' + color_palette[i] + ',1)',
+    };
+  }
+
+  // LineView 
+  // -------------------
+
+  // A view extention for rendering polylines
+
+  var LineView = Disapproval.View.extend({
+    tagName: 'polyline',
+
+    events: {
+      'click': 'log'
+    },
+
+    initialize: function () {
+      this.listenTo(Disapproval, 'window:render', this.render);
+      this.render();
+    },
+
+    log: function () {
+      console.log(this.collection.name)
+    },
+
+    render: function () {
+      var points = this.collection.map(function (point) {
+        return this.collection.chart.x_scale(point.get('x')) + ' ' + this.collection.chart.y_scale(point.get('y'))
+      }, this).join(',');
+      
+      this.$el.attr({
+        points: points,
+        stroke: this.collection.color.strokeColor,
+        fill: 'transparent',
+        'stroke-width': '2'
+      });
+    }
+  });
+
+  // PointView
+  // -------------------
+
+  // A view extention for rendering points
+
+  var PointView = Disapproval.View.extend({
+    tagName: 'circle',
+
+    // events: {
+    //   'mouseenter': 'highlight',
+    //   'mouseleave': 'style'
+    // },
+
+    initialize: function () {
+      this.listenTo(Disapproval, 'window:render', this.render);
+      this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
+      this.render();
+    },
+
+    render: function () {
+      this.$el.attr({
+        cx: this.model.collection.chart.x_scale(this.model.get('x')),
+        cy: this.model.collection.chart.y_scale(this.model.get('y')),
+        r: '4',
+        'stroke-width': '1'
+      });
+      this.style();
+    },
+
+    checkProximity: function (coordinates) {
+      var delta_x = coordinates.x - this.model.collection.chart.x_scale(this.model.get('x'));
+      // var delta_y = coordinates.y - this.model.collection.chart.y_scale(this.model.get('y'));
+      // if (Math.pow(delta_x, 2) + Math.pow(delta_y, 2) < Math.pow(this.threshold, 2)) {
+      if (Math.abs(delta_x) < this.model.collection.chart.threshold) {
+        if (!this.is_highlighted) this.highlight();
+      } else if (this.is_highlighted) {
+        this.style();
+      }
+    },
+
+    style: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.pointColor,
+        stroke: this.model.collection.color.pointStrokeColor
+      });
+      this.is_highlighted = false;
+    },
+
+    highlight: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.pointHighlightFill,
+        stroke: this.model.collection.color.pointHighlightStroke
+      });
+      this.is_highlighted = true;
+    }
+  });
 
   return Disapproval;
 

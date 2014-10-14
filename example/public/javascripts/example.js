@@ -13,6 +13,8 @@ $(document).ready(function () {
     })
   };
 
+  $('<div>', { id: 'chart-container' }).appendTo('body');
+
   // make a new chart
-  var chart = yyy = new Disapproval.Chart(data);
+  var chart = yyy = new Disapproval.Chart(data, { container: '#chart-container' });
 });
