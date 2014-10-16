@@ -1,20 +1,37 @@
 $(document).ready(function () {
   // fake some data
-  var data = xxx = {
-    datasets: _.map(_.range(1, 11), function (i) {
+  var data = {
+    labels: _.map(_.range(0, 31), function (i) {
       return {
-        name: 'Slope ' + i,
-        x: _.range(1, 30 + 1),
-        y: _.range(i, i * 30 + 1, i),
-        meta: _.map(_.range(i, i * 30 + 1, i), function (i) {
-          return 'My value is: ' + i;
-        })
+        x: i, 
+        label: 'i have x label: ' + i
       };
+    }),
+    datasets: _.map(_.range(0, 11), function (i) {
+      if (i == 0) {
+        return {
+          name: 'Slope ' + i,
+          x: _.range(0, 30 + 1),
+          y: _.map(_.range(0, 30 + 1), function () { return 0; }),
+          meta: _.map(_.range(0, 30 + 1), function () {
+            return 'My value is: ' + 0;
+          })
+        };
+      } else {
+        return {
+          name: 'Slope ' + i,
+          x: _.range(0, 30 + 1),
+          y: _.range(0, 30 * (i + 1) + 30, i),
+          meta: _.map(_.range(0, 30 * (i + 1) + 30, i), function (i) {
+            return 'My value is: ' + i;
+          })
+        };
+      }
     })
   };
 
   $('<div>', { id: 'chart-container' }).appendTo('body');
 
   // make a new chart
-  var chart = yyy = new Disapproval.Chart(data, { container: '#chart-container' });
+  var chart = new Disapproval.Chart(data, { container: '#chart-container' });
 });

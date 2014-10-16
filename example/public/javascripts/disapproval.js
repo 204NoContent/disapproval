@@ -951,6 +951,8 @@
     this.listenTo(Disapproval, 'window:shrink', this._shrink);
     this.listenTo(Disapproval, 'window:grow', this._grow);
     this.listenTo(Disapproval, 'window:set_size', this._setSize);
+    this.listenTo(Disapproval, 'window:set_canvas', this._setCanvas);
+    this.listenTo(Disapproval, 'window:set_axes', this._setAxes);
     this.listenTo(Disapproval, 'window:set_threshold', this._setThreshold);
     if (data) this.reset(data, _.extend({ silent: true }, options));
     this.delegateEvents();
@@ -985,7 +987,12 @@
 
     _reset: function () {
       this.datasets = [];
-      this.bounds = { x_min: 0, x_max: 0, y_min: 0, y_max: 0 };
+      this.data_range = { x_min: Infinity, x_max: -Infinity, y_min: Infinity, y_max: -Infinity };
+      this.canvas = {
+        left: { width: 0, height: 0, offset: { x: 0, y: 0 }},
+        bottom: { width: 0, height: 0, offset: { x: 0, y: 0 }},
+        main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
+      };
     },
 
     _setBounds: function () {
@@ -995,16 +1002,89 @@
         var x_max = _.max(dataset.pluck('x'));
         var y_min = _.min(dataset.pluck('y'));
         var y_max = _.max(dataset.pluck('y'));
-        if ( x_min < this.bounds.x_min) this.bounds.x_min = x_min;
-        if ( x_max > this.bounds.x_max) this.bounds.x_max = x_max;
-        if ( y_min < this.bounds.y_min) this.bounds.y_min = y_min;
-        if ( y_max > this.bounds.y_max) this.bounds.y_max = y_max;
+        if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
+        if ( x_max > this.data_range.x_max) this.data_range.x_max = x_max;
+        if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
+        if ( y_max > this.data_range.y_max) this.data_range.y_max = y_max;
       }, this);
+
+      var natural_y_bounds = this._naturalBoundsY();
+      var natural_x_bounds = this._naturalBoundsX();
+      this.bounds = {
+        y_min: natural_y_bounds.min,
+        y_max: natural_y_bounds.max,
+        y_step: natural_y_bounds.step,
+        x_min: natural_x_bounds.min,
+        x_max: natural_x_bounds.max,
+        x_step: natural_x_bounds.step
+      }
+    },
+
+    _setAxes: function () {
+      var padding = 7;
+
+      // y-axis
+      var y_step = this.bounds.y_step;
+      while ((this.canvas.left.label.height + padding) * _.range(this.bounds.y_min, this.bounds.y_max, y_step).length > this.canvas.left.height) {
+        y_step *= 2;
+      }
+      var y_values = _.map(_.range(this.bounds.y_min, this.bounds.y_max, y_step), function (y) {
+        return {
+          y: y,
+          label: String(y) // TODO: format as desired
+        };
+      }, this);
+      if (this.y_axis) {
+        this.y_axis.set(y_values);
+      } else {
+        this.y_axis = new Disapproval.Collection(y_values);
+        this.y_axis.chart = this;
+      }
+
+      // x-axis
+      var labels = this.labels;
+      while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
+        labels = _.select(labels, function (x, i) { return i % 2 == 0; });
+      }
+      if (this.x_axis) {
+        this.x_axis.set(labels);
+      } else {
+        this.x_axis = new Disapproval.Collection(labels);
+        this.x_axis.chart = this;
+      }
+    },
+
+    _naturalBoundsY: function () {
+      var range = this.data_range.y_max - this.data_range.y_min
+      var step = Math.pow(10, String(Math.floor(range)).length - 1);
+      while (range / step < 11) {
+        step /= 2;
+      }
+      var lower_bound;
+      if (this.data_range.y_min >= 0 && this.data_range.y_min <= step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = Math.floor(this.data_range.y_min / step) * step;
+      }
+      var upper_bound = (Math.ceil(this.data_range.y_max / step) + 1 / 2) * step;
+      return { min: lower_bound, max: upper_bound, step: step };
+    },
+
+    _naturalBoundsX: function () {
+      var step = (this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1)
+      var lower_bound;
+      if (this.data_range.x_min >= 0 && this.data_range.x_min <= step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = Math.floor(this.data_range.x_min - step);
+      }
+      var upper_bound = Math.ceil(this.data_range.x_max + step / 2);
+
+      return { min: lower_bound, max: upper_bound, step: step };
     },
 
     _setThreshold: function () {
-      var max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
-      this.threshold = this.width / max_points / 2;
+      this.threshold = this.xScale(this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1) / 2;
     },
 
     _shrink: function () {
@@ -1027,10 +1107,74 @@
       });
     },
 
+    _setCanvas: function () {
+      this._setCanvasWidths();
+      this._setCanvasHeights();
+    },
+
+    _setCanvasWidths: function () {
+      var temp_svg = svg$el('svg');
+      var label = svg$el('text').html(String(this.bounds.y_max)); // Change this if labels are formatted
+      temp_svg.append(label);
+      $('body').append(temp_svg);
+
+      this.canvas.left.label = {
+        width: label.width(),
+        height: parseInt(label.css('font-size'))
+      }
+      temp_svg.remove();
+
+      var padding = 10;
+      var width = this.canvas.left.label.width + padding;
+      this.canvas.left.width = this.canvas.bottom.offset.x = this.canvas.main.offset.x = width;
+      this.canvas.bottom.width = this.canvas.main.width = this.width - width;
+    },
+
+    _setCanvasHeights: function () {
+      var padding = 10;
+
+      var temp_svg = svg$el('svg');
+      $('body').append(temp_svg);
+
+      this.canvas.bottom.label = {
+        width: 0,
+        height: 0
+      };
+
+      _.each(this.labels, function (label) {
+        label = svg$el('text').html(label.label);
+        temp_svg.append(label);
+        var width = label.width();
+        var height = parseInt(label.css('font-size'));
+        if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
+        if (height > this.canvas.bottom.label.height) this.canvas.bottom.label.height = height;
+      }, this);
+      temp_svg.remove();
+
+      var label_width = this.canvas.bottom.label.width + padding;
+      var max_available_label_space = this.canvas.bottom.width / _.range(this.bounds.x_min, this.bounds.x_max, this.bounds.x_step).length;
+      var height;
+
+      
+      var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x
+
+      if (label_width > max_available_label_space || label_width / 2 > first_x_tick_x_offset) {
+        this.canvas.bottom.label.is_tilted = true;
+        height = this.canvas.bottom.label.width / Math.sqrt(2) + 2 * padding;
+        this.canvas.bottom.width = this.canvas.main.width = this.canvas.bottom.width - this.canvas.bottom.label.width / Math.sqrt(2);
+      } else {
+        height = this.canvas.bottom.label.height + 2 * padding;
+        this.canvas.bottom.label.is_tilted = false;
+      }
+      this.canvas.bottom.height = height;
+      this.canvas.left.height = this.canvas.main.height = this.canvas.bottom.offset.y = this.height - height;
+    },
+
     // public methods
     reset: function (data, options) {
       options || (options = {});
       this._reset();
+      this.labels = data.labels;
       var color_palette = data.datasets.length > 10 ? color_palette_20 : color_palette_10;
       this.datasets = _.map(data.datasets, function (dataset, i) {
         var points = _.map(dataset.x, function (x, j) {
@@ -1046,6 +1190,7 @@
         dataset_collection.chart = this;
         return dataset_collection;
       }, this);
+      this.max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
       this._setBounds();
       if (!options.silent) this.trigger('reset', this, options);
       // break apart resizing into steps so that all chart instances can execute each step together
@@ -1053,35 +1198,25 @@
       Disapproval.trigger('window:shrink');
       Disapproval.trigger('window:grow');
       Disapproval.trigger('window:set_size');
+      Disapproval.trigger('window:set_canvas');
+      Disapproval.trigger('window:set_axes');
       Disapproval.trigger('window:set_threshold');
       Disapproval.trigger('window:render');
       return this;
     },
 
-    x_scale: function (x) {
-      return x * this.width / (this.bounds.x_max - this.bounds.x_min);
+    xScale: function (x) {
+      return x * this.canvas.main.width / (this.bounds.x_max - this.bounds.x_min);
     },
 
-    y_scale: function (y) {
-      return this.height - y * this.height / (this.bounds.y_max - this.bounds.y_min);
+    yScale: function (y) {
+      return this.canvas.main.height - y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
     },
 
     render: function () {
-      _.each(this.datasets, function (dataset) {
-        var line_view = new LineView({
-          collection: dataset
-        });
-
-        this.$el.append(line_view.$el);
-
-        dataset.each(function (point) {
-          var point_view = new PointView({
-            model: point
-          });
-
-          this.$el.append(point_view.$el);
-        }, this);
-      }, this);
+      this.$el.append(new LeftView({ model: this }).$el);
+      this.$el.append(new BottomView({ model: this }).$el);
+      this.$el.append(new MainView({ model: this }).$el);
     },
 
     initialize: function () {}
@@ -1138,6 +1273,8 @@
     Disapproval.trigger('window:shrink');
     Disapproval.trigger('window:grow');
     Disapproval.trigger('window:set_size');
+    Disapproval.trigger('window:set_canvas');
+    Disapproval.trigger('window:set_axes');
     Disapproval.trigger('window:set_threshold');
     Disapproval.trigger('window:render');
   }, 300));
@@ -1200,6 +1337,11 @@
     };
   }
 
+  function svg$el(tag_name, attributes) {
+    attributes || (attributes = {});
+    return Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
+  }
+
   // LineView 
   // -------------------
 
@@ -1208,22 +1350,16 @@
   var LineView = Disapproval.View.extend({
     tagName: 'polyline',
 
-    events: {
-      'click': 'log'
-    },
-
     initialize: function () {
       this.listenTo(Disapproval, 'window:render', this.render);
       this.render();
     },
 
-    log: function () {
-      console.log(this.collection.name)
-    },
-
     render: function () {
       var points = this.collection.map(function (point) {
-        return this.collection.chart.x_scale(point.get('x')) + ' ' + this.collection.chart.y_scale(point.get('y'))
+        var x = this.collection.chart.xScale(point.get('x')) + this.collection.chart.canvas.main.offset.x;
+        var y = this.collection.chart.yScale(point.get('y')) + this.collection.chart.canvas.main.offset.y;
+        return x + ' ' + y
       }, this).join(',');
       
       this.$el.attr({
@@ -1243,11 +1379,6 @@
   var PointView = Disapproval.View.extend({
     tagName: 'circle',
 
-    // events: {
-    //   'mouseenter': 'highlight',
-    //   'mouseleave': 'style'
-    // },
-
     initialize: function () {
       this.listenTo(Disapproval, 'window:render', this.render);
       this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
@@ -1255,9 +1386,11 @@
     },
 
     render: function () {
+      var x = this.model.collection.chart.xScale(this.model.get('x')) + this.model.collection.chart.canvas.main.offset.x;
+      var y = this.model.collection.chart.yScale(this.model.get('y')) + this.model.collection.chart.canvas.main.offset.y;
       this.$el.attr({
-        cx: this.model.collection.chart.x_scale(this.model.get('x')),
-        cy: this.model.collection.chart.y_scale(this.model.get('y')),
+        cx: x,
+        cy: y,
         r: '4',
         'stroke-width': '1'
       });
@@ -1265,9 +1398,7 @@
     },
 
     checkProximity: function (coordinates) {
-      var delta_x = coordinates.x - this.model.collection.chart.x_scale(this.model.get('x'));
-      // var delta_y = coordinates.y - this.model.collection.chart.y_scale(this.model.get('y'));
-      // if (Math.pow(delta_x, 2) + Math.pow(delta_y, 2) < Math.pow(this.threshold, 2)) {
+      var delta_x = coordinates.x - this.model.collection.chart.xScale(this.model.get('x')) - this.model.collection.chart.canvas.main.offset.x;
       if (Math.abs(delta_x) < this.model.collection.chart.threshold) {
         if (!this.is_highlighted) this.highlight();
       } else if (this.is_highlighted) {
@@ -1292,6 +1423,255 @@
     }
   });
 
+  // LeftView 
+  // -------------------
+
+  // A view extention for rendering the y-axis and labels
+
+  var LeftView = Disapproval.View.extend({
+    className: 'canvas-left',
+
+    initialize: function () {
+      this.listenTo(this.model.y_axis, 'add', this.renderYTick);
+      this.render();
+    },
+
+    render: function () {
+      this.renderYLine();
+      this.model.y_axis.each( function (model) {
+        this.renderYTick(model);
+      }, this);
+    },
+
+    renderYLine: function () {
+      this.$el.append(new YLineView({ collection: this.model.x_axis }).$el);
+    },
+
+    renderYTick: function (model) {
+      this.$el.append(new YTickView({ model: model }).$el);
+      this.$el.append(new YLabelView({ model: model }).$el);
+    }
+  });
+
+  var YLineView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.collection, 'sort', this.render); // sort fires when collect set is finshed
+      this.render();
+    },
+
+    render: function () {
+      this.$el.attr({
+        x1: this.collection.chart.canvas.left.width,
+        x2: this.collection.chart.canvas.left.width,
+        y1: this.collection.chart.canvas.left.offset.y,
+        y2: this.collection.chart.canvas.left.offset.y + this.collection.chart.canvas.left.height,
+        stroke: '#999',
+        'stroke-width': '1'
+      });
+    }
+  });
+
+
+  var YTickView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.yScale(this.model.get('y'));
+      this.$el.attr({
+        x1: this.model.collection.chart.canvas.left.width - 7,
+        x2: this.model.collection.chart.canvas.left.width,
+        y1: position,
+        y2: position,
+        stroke: '#999',
+        'stroke-width': '1'
+      });
+    }
+  });
+
+  var YLabelView = Disapproval.View.extend({
+    tagName: 'text',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.yScale(this.model.get('y'));
+
+      this.$el.html(this.model.get('label'));
+
+      var temp_svg = svg$el('svg');
+      temp_svg.append(this.$el);
+      $('body').append(temp_svg);
+      var width = this.$el.width();
+      var height = parseInt(this.$el.css('font-size'));
+      temp_svg.remove();
+
+      this.$el.attr({
+        x: this.model.collection.chart.canvas.left.width - width - 10,
+        y: position + height / 2 - 1, // Don't know why I need a 1 here, maybe lineheight of tick
+        fill: '#999'
+      });
+
+    }
+  });
+
+  var BottomView = Disapproval.View.extend({
+    className: 'canvas-bottom',
+
+    initialize: function () {
+      this.listenTo(this.model.x_axis, 'add', this.renderXTick);
+      this.render();
+    },
+
+    render: function () {
+      this.renderXLine();
+      this.model.x_axis.each(function (model) {
+        this.renderXTick(model);
+      }, this);
+    },
+
+    renderXLine: function () {
+      this.$el.append(new XLineView({ collection: this.model.x_axis }).$el);
+    },
+
+    renderXTick: function (model) {
+      this.$el.append(new XTickView({ model: model }).$el);
+      this.$el.append(new XLabelView({ model: model }).$el);
+    }
+
+  });
+
+  var XLineView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.collection, 'sort', this.render); // sort fires when collect set is finshed
+      this.render();
+    },
+
+    render: function () {
+      this.$el.attr({
+        x1: this.collection.chart.canvas.bottom.offset.x,
+        x2: this.collection.chart.canvas.bottom.offset.x + this.collection.chart.canvas.bottom.width,
+        y1: this.collection.chart.canvas.bottom.offset.y,
+        y2: this.collection.chart.canvas.bottom.offset.y,
+        stroke: '#999',
+        'stroke-width': '1'
+      });
+    }
+  });
+
+  var XTickView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.xScale(this.model.get('x'));
+      this.$el.attr({
+        x1: position + this.model.collection.chart.canvas.bottom.offset.x,
+        x2: position + this.model.collection.chart.canvas.bottom.offset.x,
+        y1: this.model.collection.chart.canvas.bottom.offset.y + 7,
+        y2: this.model.collection.chart.canvas.bottom.offset.y,
+        stroke: '#999',
+        'stroke-width': '1'
+      });
+    }
+  });
+
+  var XLabelView = Disapproval.View.extend({
+    tagName: 'text',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.xScale(this.model.get('x'));
+
+      this.$el.html(this.model.get('label'));
+
+      var temp_svg = svg$el('svg');
+      temp_svg.append(this.$el);
+      $('body').append(temp_svg);
+      var width = this.$el.width();
+      var height = this.$el.height();
+      temp_svg.remove();
+
+      var padding = 5;
+      var y = this.model.collection.chart.canvas.bottom.offset.y + height;
+      var x = position + this.model.collection.chart.canvas.bottom.offset.x;
+      if (this.model.collection.chart.canvas.bottom.label.is_tilted) {
+        this.$el.attr({
+          x: x,
+          y: y,
+          transform: 'rotate(45 ' + x + ',' + y + ')',
+          fill: '#999'
+        });
+      } else {
+        this.$el.attr({
+          x: x - width / 2,
+          y: y + padding,
+          fill: '#999'
+        });
+      }
+    }
+  });
+
+  // MainView
+  // -------------------
+
+  // A view extention for rendering the main section of the chart
+
+  var MainView = Disapproval.View.extend({
+    className: 'canvas-main',
+
+    initialize: function () {
+      this.render();
+    },
+
+    render: function () {
+      _.each(this.model.datasets, function (dataset) {
+        var line_view = new LineView({
+          collection: dataset
+        });
+
+        this.$el.append(line_view.$el);
+
+        dataset.each(function (point) {
+          var point_view = new PointView({
+            model: point
+          });
+
+          this.$el.append(point_view.$el);
+        }, this);
+      }, this);
+    }
+  });
+
+
   return Disapproval;
 
 }));
+
+
+
+
+
