@@ -7,7 +7,7 @@ $(document).ready(function () {
         label: 'i have x label: ' + i
       };
     }),
-    datasets: _.map(_.range(0, 11), function (i) {
+    datasets: _.map(_.range(1, 11), function (i) {
       if (i == 0) {
         return {
           name: 'Slope ' + i,
@@ -31,7 +31,9 @@ $(document).ready(function () {
   };
 
   $('<div>', { id: 'chart-container' }).appendTo('body');
-
   // make a new chart
   var chart = new Disapproval.Chart(data, { container: '#chart-container' });
+
+  // $('<div>', { id: 'chart-container-2' }).appendTo('body');
+  // var chart2 = new Disapproval.Chart(data, { container: '#chart-container-2' });
 });

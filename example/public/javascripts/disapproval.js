@@ -967,15 +967,21 @@
     container: 'body',
 
     events: {
-      'mousemove': '_triggerMouseMove'
+      'mousemove': '_triggerMousemove',
+      'mouseout': '_triggerMouseout'
     },
 
-    _triggerMouseMove: function (e) {
+    _triggerMousemove: function (e) {
       var offset = this.$el.offset();
       Disapproval.trigger('chart:mousemove', {
         x: e.pageX - offset.left,
-        y: e.pageY - offset.top
+        y: e.pageY - offset.top,
+        chart: this
       });
+    },
+
+    _triggerMouseout: function () {
+      Disapproval.trigger('chart:mouseout', { chart: this });
     },
 
     _createElement: function () {
@@ -1315,6 +1321,25 @@
     '158,218,229'
   ];
 
+  var globalOptions = {
+    grid_stroke_color: "rgba(0,0,0,0.06)",
+    grid_stroke_width: 1,
+    grid_show_lines: true,
+
+    axes_stroke_color: "rgba(0,0,0,0.15)",
+    axes_stroke_width: 1,
+    axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    axes_font_size: 12,
+    axes_font_color: "rgba(0,0,0,0.7)",
+    y_axis_lower_bound_zero: false,
+    x_axis_lower_bound_zero: false,
+
+    point_radius: 3.8,
+    point_stroke_width: 1.2,
+
+    line_stroke_width: 2,
+  };
+
   function lineChartColoring(i, color_palette) {
     i = i % color_palette.length;
     return {
@@ -1324,16 +1349,6 @@
       pointStrokeColor: "#fff",
       pointHighlightFill: "#fff",
       pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
-    };
-  }
-
-  function barChartColoring(i, color_palette) {
-    i = i % color_palette.length;
-    return {
-      fillColor: 'rgba(' + color_palette[i] + ',0.65)',
-      strokeColor: 'rgba(' + color_palette[i] + ',0.9)',
-      highlightFill: 'rgba(' + color_palette[i] + ',0.8)',
-      highlightStroke: 'rgba(' + color_palette[i] + ',1)',
     };
   }
 
@@ -1366,7 +1381,7 @@
         points: points,
         stroke: this.collection.color.strokeColor,
         fill: 'transparent',
-        'stroke-width': '2'
+        'stroke-width': globalOptions.line_stroke_width
       });
     }
   });
@@ -1382,6 +1397,7 @@
     initialize: function () {
       this.listenTo(Disapproval, 'window:render', this.render);
       this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
+      this.listenTo(Disapproval, 'chart:mouseout', this.removeHighlight);
       this.render();
     },
 
@@ -1391,17 +1407,25 @@
       this.$el.attr({
         cx: x,
         cy: y,
-        r: '4',
-        'stroke-width': '1'
+        r: globalOptions.point_radius,
+        'stroke-width': globalOptions.point_stroke_width
       });
       this.style();
     },
 
-    checkProximity: function (coordinates) {
-      var delta_x = coordinates.x - this.model.collection.chart.xScale(this.model.get('x')) - this.model.collection.chart.canvas.main.offset.x;
-      if (Math.abs(delta_x) < this.model.collection.chart.threshold) {
-        if (!this.is_highlighted) this.highlight();
-      } else if (this.is_highlighted) {
+    checkProximity: function (event) {
+      if (this.model.collection.chart == event.chart) {
+        var delta_x = event.x - this.model.collection.chart.xScale(this.model.get('x')) - this.model.collection.chart.canvas.main.offset.x;
+        if (Math.abs(delta_x) < this.model.collection.chart.threshold) {
+          if (!this.is_highlighted) this.highlight();
+        } else if (this.is_highlighted) {
+          this.style();
+        }
+      }
+    },
+
+    removeHighlight: function (event) {
+      if (this.model.collection.chart == event.chart) {
         this.style();
       }
     },
@@ -1450,6 +1474,11 @@
     renderYTick: function (model) {
       this.$el.append(new YTickView({ model: model }).$el);
       this.$el.append(new YLabelView({ model: model }).$el);
+      if (globalOptions.grid_show_lines) {
+        if (model.get('y') != this.model.bounds.y_min) {
+          this.$el.append(new YGridView({ model: model }).$el);
+        }
+      }
     }
   });
 
@@ -1467,8 +1496,9 @@
         x2: this.collection.chart.canvas.left.width,
         y1: this.collection.chart.canvas.left.offset.y,
         y2: this.collection.chart.canvas.left.offset.y + this.collection.chart.canvas.left.height,
-        stroke: '#999',
-        'stroke-width': '1'
+        stroke: globalOptions.axes_stroke_color,
+        'stroke-width': globalOptions.axes_stroke_width,
+        'shape-rendering': 'crispEdges'
       });
     }
   });
@@ -1484,14 +1514,16 @@
     },
 
     render: function () {
+      var tick_width = 5;
       var position = this.model.collection.chart.yScale(this.model.get('y'));
       this.$el.attr({
-        x1: this.model.collection.chart.canvas.left.width - 7,
+        x1: this.model.collection.chart.canvas.left.width - tick_width,
         x2: this.model.collection.chart.canvas.left.width,
         y1: position,
         y2: position,
-        stroke: '#999',
-        'stroke-width': '1'
+        stroke: globalOptions.axes_stroke_color,
+        'stroke-width': globalOptions.axes_stroke_width,
+        'shape-rendering': 'crispEdges'
       });
     }
   });
@@ -1509,20 +1541,47 @@
       var position = this.model.collection.chart.yScale(this.model.get('y'));
 
       this.$el.html(this.model.get('label'));
+      this.$el.attr({
+        fill: globalOptions.axes_font_color,
+        'font-family': globalOptions.axes_font_family,
+        'font-size': globalOptions.axes_font_size
+      });
 
       var temp_svg = svg$el('svg');
       temp_svg.append(this.$el);
       $('body').append(temp_svg);
       var width = this.$el.width();
-      var height = parseInt(this.$el.css('font-size'));
       temp_svg.remove();
 
+      var label_margin_right = 10;
       this.$el.attr({
-        x: this.model.collection.chart.canvas.left.width - width - 10,
-        y: position + height / 2 - 1, // Don't know why I need a 1 here, maybe lineheight of tick
-        fill: '#999'
+        x: this.model.collection.chart.canvas.left.width - width - label_margin_right,
+        y: position + globalOptions.axes_font_size / 2 - 1 // Don't know why I need a 1 here, maybe lineheight of tick
       });
 
+    }
+  });
+
+  var YGridView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.yScale(this.model.get('y'));
+      this.$el.attr({
+        x1: this.model.collection.chart.canvas.main.offset.x,
+        x2: this.model.collection.chart.canvas.main.offset.x + this.model.collection.chart.canvas.main.width,
+        y1: position,
+        y2: position,
+        stroke: globalOptions.grid_stroke_color,
+        'stroke-width': globalOptions.grid_stroke_width,
+        'shape-rendering': 'crispEdges'
+      });
     }
   });
 
@@ -1535,19 +1594,20 @@
     },
 
     render: function () {
-      this.renderXLine();
+      this.$el.append(new XLineView({ collection: this.model.x_axis }).$el);
       this.model.x_axis.each(function (model) {
         this.renderXTick(model);
       }, this);
     },
 
-    renderXLine: function () {
-      this.$el.append(new XLineView({ collection: this.model.x_axis }).$el);
-    },
-
     renderXTick: function (model) {
       this.$el.append(new XTickView({ model: model }).$el);
       this.$el.append(new XLabelView({ model: model }).$el);
+      if (globalOptions.grid_show_lines) {
+        if (model.get('x') != this.model.bounds.x_min) {
+          this.$el.append(new XGridView({ model: model }).$el);
+        }
+      }
     }
 
   });
@@ -1566,8 +1626,9 @@
         x2: this.collection.chart.canvas.bottom.offset.x + this.collection.chart.canvas.bottom.width,
         y1: this.collection.chart.canvas.bottom.offset.y,
         y2: this.collection.chart.canvas.bottom.offset.y,
-        stroke: '#999',
-        'stroke-width': '1'
+        stroke: globalOptions.axes_stroke_color,
+        'stroke-width': globalOptions.axes_stroke_width,
+        'shape-rendering': 'crispEdges'
       });
     }
   });
@@ -1582,14 +1643,16 @@
     },
 
     render: function () {
+      var tick_width = 5;
       var position = this.model.collection.chart.xScale(this.model.get('x'));
       this.$el.attr({
         x1: position + this.model.collection.chart.canvas.bottom.offset.x,
         x2: position + this.model.collection.chart.canvas.bottom.offset.x,
-        y1: this.model.collection.chart.canvas.bottom.offset.y + 7,
+        y1: this.model.collection.chart.canvas.bottom.offset.y + tick_width,
         y2: this.model.collection.chart.canvas.bottom.offset.y,
-        stroke: '#999',
-        'stroke-width': '1'
+        stroke: globalOptions.axes_stroke_color,
+        'stroke-width': globalOptions.axes_stroke_width,
+        'shape-rendering': 'crispEdges'
       });
     }
   });
@@ -1607,33 +1670,60 @@
       var position = this.model.collection.chart.xScale(this.model.get('x'));
 
       this.$el.html(this.model.get('label'));
+      this.$el.attr({
+        fill: globalOptions.axes_font_color,
+        'font-family': globalOptions.axes_font_family,
+        'font-size': globalOptions.axes_font_size
+      });
 
       var temp_svg = svg$el('svg');
       temp_svg.append(this.$el);
       $('body').append(temp_svg);
       var width = this.$el.width();
-      var height = this.$el.height();
       temp_svg.remove();
 
-      var padding = 5;
-      var y = this.model.collection.chart.canvas.bottom.offset.y + height;
+      var label_margin_top = 8;
+      var tilted_label_margin_top = 2;
+      var y = this.model.collection.chart.canvas.bottom.offset.y + globalOptions.axes_font_size;
       var x = position + this.model.collection.chart.canvas.bottom.offset.x;
       if (this.model.collection.chart.canvas.bottom.label.is_tilted) {
         this.$el.attr({
           x: x,
-          y: y,
-          transform: 'rotate(45 ' + x + ',' + y + ')',
-          fill: '#999'
+          y: y + tilted_label_margin_top,
+          transform: 'rotate(45 ' + x + ',' + y + ')'
         });
       } else {
         this.$el.attr({
           x: x - width / 2,
-          y: y + padding,
-          fill: '#999'
+          y: y + label_margin_top
         });
       }
     }
   });
+
+  var XGridView = Disapproval.View.extend({
+    tagName: 'line',
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'change', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var position = this.model.collection.chart.xScale(this.model.get('x'));
+      this.$el.attr({
+        x1: position + this.model.collection.chart.canvas.main.offset.x,
+        x2: position + this.model.collection.chart.canvas.main.offset.x,
+        y1: this.model.collection.chart.canvas.main.offset.y + this.model.collection.chart.canvas.main.height,
+        y2: this.model.collection.chart.canvas.main.offset.y,
+        stroke: globalOptions.grid_stroke_color,
+        'stroke-width': globalOptions.grid_stroke_width,
+        'shape-rendering': 'crispEdges'
+      });
+    }
+  });
+
 
   // MainView
   // -------------------
