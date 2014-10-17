@@ -945,7 +945,8 @@
     this.cid = _.uniqueId('view');
     options || (options = {});
     _.extend(this, _.pick(options, chartOptions));
-    this._createElement();
+    this._ensureElement();
+    this._attachToContainer();
     this._reset();
     this.initialize.apply(this, arguments);
     this.listenTo(Disapproval, 'window:shrink', this._shrink);
@@ -968,7 +969,7 @@
 
     events: {
       'mousemove': '_triggerMousemove',
-      'mouseout': '_triggerMouseout'
+      'mouseleave': '_triggerMouseleave'
     },
 
     _triggerMousemove: function (e) {
@@ -980,15 +981,13 @@
       });
     },
 
-    _triggerMouseout: function () {
-      Disapproval.trigger('chart:mouseout', { chart: this });
+    _triggerMouseleave: function () {
+      Disapproval.trigger('chart:mouseleave', { chart: this });
     },
 
-    _createElement: function () {
+    _attachToContainer: function () {
       this.$container = $(this.container);
-      this.$container.append('<svg ' + 'class=' + this.cid + '></svg>');
-      this.$el = this.$container.find('svg.' + this.cid);
-      this.$el.appendTo(this.$container);
+      this.$container.append(this.$el);
     },
 
     _reset: function () {
@@ -999,6 +998,7 @@
         bottom: { width: 0, height: 0, offset: { x: 0, y: 0 }},
         main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
       };
+      this.tooltipCollection = new Disapproval.Collection([], { comparator: function (model) { return -model.get('y'); } });
     },
 
     _setBounds: function () {
@@ -1223,6 +1223,7 @@
       this.$el.append(new LeftView({ model: this }).$el);
       this.$el.append(new BottomView({ model: this }).$el);
       this.$el.append(new MainView({ model: this }).$el);
+      $('body').append($('<div>', { class: 'tooltip-container'}).append(new TooltipView({ collection: this.tooltipCollection, tagName: 'ul' }).$el));
     },
 
     initialize: function () {}
@@ -1395,15 +1396,16 @@
     tagName: 'circle',
 
     initialize: function () {
+      this.chart = this.model.collection.chart;
       this.listenTo(Disapproval, 'window:render', this.render);
       this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
-      this.listenTo(Disapproval, 'chart:mouseout', this.removeHighlight);
+      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlight);
       this.render();
     },
 
     render: function () {
-      var x = this.model.collection.chart.xScale(this.model.get('x')) + this.model.collection.chart.canvas.main.offset.x;
-      var y = this.model.collection.chart.yScale(this.model.get('y')) + this.model.collection.chart.canvas.main.offset.y;
+      var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x;
+      var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
       this.$el.attr({
         cx: x,
         cy: y,
@@ -1414,18 +1416,20 @@
     },
 
     checkProximity: function (event) {
-      if (this.model.collection.chart == event.chart) {
-        var delta_x = event.x - this.model.collection.chart.xScale(this.model.get('x')) - this.model.collection.chart.canvas.main.offset.x;
-        if (Math.abs(delta_x) < this.model.collection.chart.threshold) {
+      if (this.chart == event.chart) {
+        var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
+        if (Math.abs(delta_x) < this.chart.threshold) {
           if (!this.is_highlighted) this.highlight();
         } else if (this.is_highlighted) {
-          this.style();
+          this.removeHighlight(event);
         }
       }
     },
 
     removeHighlight: function (event) {
-      if (this.model.collection.chart == event.chart) {
+      if (this.chart == event.chart) {
+        this.is_highlighted = false;
+        this.chart.tooltipCollection.remove(this.model);
         this.style();
       }
     },
@@ -1435,7 +1439,6 @@
         fill: this.model.collection.color.pointColor,
         stroke: this.model.collection.color.pointStrokeColor
       });
-      this.is_highlighted = false;
     },
 
     highlight: function () {
@@ -1444,6 +1447,7 @@
         stroke: this.model.collection.color.pointHighlightStroke
       });
       this.is_highlighted = true;
+      this.chart.tooltipCollection.add(this.model);
     }
   });
 
@@ -1753,6 +1757,58 @@
           this.$el.append(point_view.$el);
         }, this);
       }, this);
+    }
+  });
+
+  var TooltipView = Disapproval.View.extend({
+
+    initialize: function () {
+      this.listenTo(this.collection, 'add', this.render);
+    },
+
+    render: _.debounce(function () {
+      this.collection.each(function (point) {
+        this.$el.append(new TooltipPointView({ model: point, tagName: 'li' }).$el);
+      }, this);
+    }, 100),
+
+    // Use non-namespaced dom nodes
+    _ensureElement: function() {
+      if (!this.el) {
+        var attrs = _.extend({}, _.result(this, 'attributes'));
+        if (this.id) attrs.id = _.result(this, 'id');
+        if (this.className) attrs['class'] = _.result(this, 'className');
+        var $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
+        this.setElement($el, false);
+      } else {
+        this.setElement(_.result(this, 'el'), false);
+      }
+    }
+  });
+
+  var TooltipPointView = Disapproval.View.extend({
+
+    initialize: function () {
+      this.listenTo(this.model, 'remove', this.remove);
+      this.render();
+    },
+
+    render: function () {
+      this.$el.append($('<div>', { class: 'point-color' }).css({ position: 'absolute', width: 5, height: 5, 'margin-left': 5, 'background-color': this.model.collection.color.pointColor }));
+      this.$el.append($('<div>', { class: 'point-meta' }).css({ 'margin-left': 15 }).html(this.model.get('meta')));
+    },
+
+    // Use non-namespaced dom nodes
+    _ensureElement: function() {
+      if (!this.el) {
+        var attrs = _.extend({}, _.result(this, 'attributes'));
+        if (this.id) attrs.id = _.result(this, 'id');
+        if (this.className) attrs['class'] = _.result(this, 'className');
+        var $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
+        this.setElement($el, false);
+      } else {
+        this.setElement(_.result(this, 'el'), false);
+      }
     }
   });
 
