@@ -1,4 +1,4 @@
-//   Disapproval.js 0.0.1
+//   Disapproval.js 0.0.9
 //   (c) 2014 Aaron O'Connell, 42Floors
 // 
 //   with lots of the internals taken from Backbone.js
@@ -36,7 +36,7 @@
   var slice = array.slice;
 
   // Current version of the library. Keep in sync with `package.json`.
-  Disapproval.VERSION = '0.0.1';
+  Disapproval.VERSION = '0.0.9';
 
   // For Disapproval's purposes, jQuery, Zepto, or Ender the `$` variable.
   Disapproval.$ = $;
@@ -917,8 +917,12 @@
         var attrs = _.extend({}, _.result(this, 'attributes'));
         if (this.id) attrs.id = _.result(this, 'id');
         if (this.className) attrs['class'] = _.result(this, 'className');
-
-        var $el = Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', _.result(this, 'tagName'))).attr(attrs);
+        var $el;
+        if (_.include(svg_tags, _.result(this, 'tagName'))) {
+          $el = Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', _.result(this, 'tagName'))).attr(attrs);
+        } else {
+          $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
+        }
         this.setElement($el, false);
       } else {
         this.setElement(_.result(this, 'el'), false);
@@ -972,17 +976,19 @@
       'mouseleave': '_triggerMouseleave'
     },
 
-    _triggerMousemove: function (e) {
+    _triggerMousemove: function (event) {
       var offset = this.$el.offset();
       Disapproval.trigger('chart:mousemove', {
-        x: e.pageX - offset.left,
-        y: e.pageY - offset.top,
+        x: event.pageX - offset.left,
+        y: event.pageY - offset.top,
         chart: this
       });
     },
 
-    _triggerMouseleave: function () {
-      Disapproval.trigger('chart:mouseleave', { chart: this });
+    _triggerMouseleave: function (event) {
+      if (!$(event.relatedTarget).hasClass('tooltip')) {
+        Disapproval.trigger('chart:mouseleave', { chart: this });
+      }
     },
 
     _attachToContainer: function () {
@@ -999,6 +1005,7 @@
         main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
       };
       this.tooltipCollection = new Disapproval.Collection([], { comparator: function (model) { return -model.get('y'); } });
+      this.tooltipCollection.chart = this;
     },
 
     _setBounds: function () {
@@ -1024,6 +1031,36 @@
         x_max: natural_x_bounds.max,
         x_step: natural_x_bounds.step
       }
+    },
+
+    _naturalBoundsY: function () {
+      var range = this.data_range.y_max - this.data_range.y_min
+      var step = Math.pow(10, String(Math.floor(range)).length - 1);
+      while (range / step < 11) {
+        step /= 2;
+      }
+      var lower_bound;
+      if (this.data_range.y_min >= 0 && this.data_range.y_min <= step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = Math.floor(this.data_range.y_min / step) * step;
+      }
+
+      var upper_bound = this.data_range.y_max + step / 2;
+      return { min: lower_bound, max: upper_bound, step: step };
+    },
+
+    _naturalBoundsX: function () {
+      var step = (this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1)
+      var lower_bound;
+      if (this.data_range.x_min >= 0 && this.data_range.x_min <= step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = Math.floor(this.data_range.x_min - step);
+      }
+      var upper_bound = this.data_range.x_max + step / 2;
+
+      return { min: lower_bound, max: upper_bound, step: step };
     },
 
     _setAxes: function () {
@@ -1060,35 +1097,6 @@
       }
     },
 
-    _naturalBoundsY: function () {
-      var range = this.data_range.y_max - this.data_range.y_min
-      var step = Math.pow(10, String(Math.floor(range)).length - 1);
-      while (range / step < 11) {
-        step /= 2;
-      }
-      var lower_bound;
-      if (this.data_range.y_min >= 0 && this.data_range.y_min <= step) {
-        lower_bound = 0;
-      } else {
-        lower_bound = Math.floor(this.data_range.y_min / step) * step;
-      }
-      var upper_bound = (Math.ceil(this.data_range.y_max / step) + 1 / 2) * step;
-      return { min: lower_bound, max: upper_bound, step: step };
-    },
-
-    _naturalBoundsX: function () {
-      var step = (this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1)
-      var lower_bound;
-      if (this.data_range.x_min >= 0 && this.data_range.x_min <= step) {
-        lower_bound = 0;
-      } else {
-        lower_bound = Math.floor(this.data_range.x_min - step);
-      }
-      var upper_bound = Math.ceil(this.data_range.x_max + step / 2);
-
-      return { min: lower_bound, max: upper_bound, step: step };
-    },
-
     _setThreshold: function () {
       this.threshold = this.xScale(this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1) / 2;
     },
@@ -1120,18 +1128,23 @@
 
     _setCanvasWidths: function () {
       var temp_svg = svg$el('svg');
-      var label = svg$el('text').html(String(this.bounds.y_max)); // Change this if labels are formatted
+      var label = svg$el('text').html(String(this.bounds.y_max)).attr({
+        fill: globalOptions.axes_font_color,
+        'font-family': globalOptions.axes_font_family,
+        'font-size': globalOptions.axes_font_size
+      }); // Change from String to the correct function this if labels are formatted
       temp_svg.append(label);
       $('body').append(temp_svg);
 
       this.canvas.left.label = {
         width: label.width(),
-        height: parseInt(label.css('font-size'))
+        height: globalOptions.axes_font_size
       }
       temp_svg.remove();
 
       var padding = 10;
       var width = this.canvas.left.label.width + padding;
+      if (width < globalOptions.y_axis_min_width) width = globalOptions.y_axis_min_width;
       this.canvas.left.width = this.canvas.bottom.offset.x = this.canvas.main.offset.x = width;
       this.canvas.bottom.width = this.canvas.main.width = this.width - width;
     },
@@ -1223,7 +1236,15 @@
       this.$el.append(new LeftView({ model: this }).$el);
       this.$el.append(new BottomView({ model: this }).$el);
       this.$el.append(new MainView({ model: this }).$el);
-      $('body').append($('<div>', { class: 'tooltip-container'}).append(new TooltipView({ collection: this.tooltipCollection, tagName: 'ul' }).$el));
+      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
+        position: 'absolute',
+        'border-radius': 3,
+        'background-color': 'rgba(0,0,0,0.8)',
+        '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        '-moz-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        'box-shadow': '0px 1px 2px rgba(0,0,0,0.2)'
+      }).hide();
+      $('body').append(this.tooltipCollection.$container.append(new TooltipView({ collection: this.tooltipCollection }).$el));
     },
 
     initialize: function () {}
@@ -1286,6 +1307,14 @@
     Disapproval.trigger('window:render');
   }, 300));
 
+  var svg_tags = [
+    'circle',
+    'line',
+    'polyline',
+    'svg',
+    'text'
+  ];
+
   var color_palette_10 = [
     '151,187,205',
     '255,127,14',
@@ -1334,11 +1363,18 @@
     axes_font_color: "rgba(0,0,0,0.7)",
     y_axis_lower_bound_zero: false,
     x_axis_lower_bound_zero: false,
+    y_axis_min_width: 0,
 
     point_radius: 3.8,
     point_stroke_width: 1.2,
 
     line_stroke_width: 2,
+
+    tooltip_offset: 10,
+    tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    tooltip_font_size: 15,
+    tooltip_font_weight: 'lighter',
+    tooltip_letter_spacing: 1.8
   };
 
   function lineChartColoring(i, color_palette) {
@@ -1761,55 +1797,128 @@
   });
 
   var TooltipView = Disapproval.View.extend({
+    tagName: 'ul',
+    className: 'tooltip list',
+
+    events: {
+      'mousemove': '_triggerMousemove',
+    },
 
     initialize: function () {
       this.listenTo(this.collection, 'add', this.render);
+      this.listenTo(this.collection, 'remove', this.hideTooltip);
+      this.$el.css({
+        padding: 10,
+        margin: 0,
+        'list-style': 'none'
+      });
     },
 
     render: _.debounce(function () {
+
       this.collection.each(function (point) {
-        this.$el.append(new TooltipPointView({ model: point, tagName: 'li' }).$el);
+        this.$el.append(new TooltipPointView({ model: point }).$el);
       }, this);
+
+      this.setTooltipPosition();
     }, 100),
 
-    // Use non-namespaced dom nodes
-    _ensureElement: function() {
-      if (!this.el) {
-        var attrs = _.extend({}, _.result(this, 'attributes'));
-        if (this.id) attrs.id = _.result(this, 'id');
-        if (this.className) attrs['class'] = _.result(this, 'className');
-        var $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
-        this.setElement($el, false);
-      } else {
-        this.setElement(_.result(this, 'el'), false);
+    setTooltipPosition: function () {
+      if (this.collection.models.length > 0) {
+        var x = this.collection.first().get('x');
+        var x_screen = this.collection.chart.xScale(x);
+        if (x_screen > this.collection.chart.canvas.main.width / 2) {
+          this.collection.side = 'left';
+        } else {
+          this.collection.side = 'right';
+        }
+
+        if (this.collection.side == 'left') {
+          this.collection.max_width = x_screen - 2 * globalOptions.tooltip_offset;
+        } else {
+          this.collection.max_width = this.collection.chart.canvas.main.width - x_screen - 2 * globalOptions.tooltip_offset;
+        }
+
+        this.collection.$container.css('max-width', this.collection.max_width);
+
+        var $main_container = this.collection.chart.$container.find('.canvas-main');
+
+        this.collection.$container.show();
+        this.collection.$container.offset({
+          top: $main_container.offset().top,
+        });
+
+        if (this.collection.side == 'left') {
+          this.collection.$container.offset({
+            left: $main_container.offset().left + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
+          });
+        } else {
+          this.collection.$container.offset({
+            left: $main_container.offset().left + x_screen + globalOptions.tooltip_offset
+          })
+        }
       }
-    }
+
+    },
+
+    hideTooltip: function () {
+        this.collection.$container.hide();
+    },
+
+    _triggerMousemove: function (event) {
+      var offset = this.collection.chart.$el.offset();
+      Disapproval.trigger('chart:mousemove', {
+        x: event.pageX - offset.left,
+        y: event.pageY - offset.top,
+        chart: this.collection.chart
+      });
+    },
+
   });
 
   var TooltipPointView = Disapproval.View.extend({
+     tagName: 'li',
+     className: 'tooltip point',
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
       this.render();
+      this.$el.css({
+        margin: 0,
+        padding: 0
+      });
     },
 
     render: function () {
-      this.$el.append($('<div>', { class: 'point-color' }).css({ position: 'absolute', width: 5, height: 5, 'margin-left': 5, 'background-color': this.model.collection.color.pointColor }));
-      this.$el.append($('<div>', { class: 'point-meta' }).css({ 'margin-left': 15 }).html(this.model.get('meta')));
-    },
+      this.$el.append($('<div>', { class: 'tooltip point-color' }).css({
+        position: 'absolute',
+        width: 8,
+        height: 8,
+        'margin-top': 4,
+        'background-color': this.model.collection.color.pointColor
+      }));
 
-    // Use non-namespaced dom nodes
-    _ensureElement: function() {
-      if (!this.el) {
-        var attrs = _.extend({}, _.result(this, 'attributes'));
-        if (this.id) attrs.id = _.result(this, 'id');
-        if (this.className) attrs['class'] = _.result(this, 'className');
-        var $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
-        this.setElement($el, false);
-      } else {
-        this.setElement(_.result(this, 'el'), false);
+      var tooltip_point = $('<div>', { class: 'tooltip point-text' });
+      var text = this.model.get('y');
+      if (this.model.get('meta')) {
+        text = this.model.get('meta') + ': ' + text;
       }
+
+      tooltip_point.html(text);
+
+      tooltip_point.css({
+        'margin-left': 20,
+        'color': 'rgba(255,255,255,1)',
+        'font-family': globalOptions.tooltip_font_family,
+        'font-size': globalOptions.tooltip_font_size,
+        'font-weight': globalOptions.tooltip_font_weight,
+        'letter-spacing': globalOptions.tooltip_letter_spacing,
+        'cursor': 'default'
+      })
+
+      this.$el.append(tooltip_point)
     }
+
   });
 
 
