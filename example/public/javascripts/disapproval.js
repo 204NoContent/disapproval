@@ -931,6 +931,9 @@
 
   });
 
+  // Store a collection of all charts created
+  var all_charts = [];
+
   // Disapproval.Chart
   // -------------------
 
@@ -956,12 +959,15 @@
     this.listenTo(Disapproval, 'window:shrink', this._shrink);
     this.listenTo(Disapproval, 'window:grow', this._grow);
     this.listenTo(Disapproval, 'window:set_size', this._setSize);
+    this.listenTo(Disapproval, 'window:calculate_label_dimensions', this._calculateLabelDimensions);
     this.listenTo(Disapproval, 'window:set_canvas', this._setCanvas);
+    this.listenTo(Disapproval, 'window:calculate_axes', this._calculateAxes);
     this.listenTo(Disapproval, 'window:set_axes', this._setAxes);
     this.listenTo(Disapproval, 'window:set_threshold', this._setThreshold);
     if (data) this.reset(data, _.extend({ silent: true }, options));
     this.delegateEvents();
     this.render();
+    all_charts.push(this);
   };
 
   // List of chart options to be merged as properties.
@@ -1034,7 +1040,7 @@
     },
 
     _naturalBoundsY: function () {
-      var range = this.data_range.y_max - this.data_range.y_min
+      var range = this.data_range.y_max - this.data_range.y_min;
       var step = Math.pow(10, String(Math.floor(range)).length - 1);
       while (range / step < 11) {
         step /= 2;
@@ -1058,12 +1064,17 @@
       } else {
         lower_bound = Math.floor(this.data_range.x_min - step);
       }
-      var upper_bound = this.data_range.x_max + step / 2;
 
+      var upper_bound;
+      if (globalOptions.multiple_charts_align_right_point) {
+        upper_bound = 1.04 * this.data_range.x_max - lower_bound;
+      } else {
+        upper_bound = this.data_range.x_max + step / 2;
+      }
       return { min: lower_bound, max: upper_bound, step: step };
     },
 
-    _setAxes: function () {
+    _calculateAxes: function () {
       var padding = 7;
 
       // y-axis
@@ -1077,24 +1088,35 @@
           label: String(y) // TODO: format as desired
         };
       }, this);
-      if (this.y_axis) {
-        this.y_axis.set(y_values);
-      } else {
-        this.y_axis = new Disapproval.Collection(y_values);
+      if (!this.y_axis) {
+        this.y_axis = new Disapproval.Collection();
         this.y_axis.chart = this;
       }
+      this.y_axis.new_values = y_values;
 
       // x-axis
       var labels = this.labels;
       while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
         labels = _.select(labels, function (x, i) { return i % 2 == 0; });
       }
-      if (this.x_axis) {
-        this.x_axis.set(labels);
-      } else {
-        this.x_axis = new Disapproval.Collection(labels);
+      if (!this.x_axis) {
+        this.x_axis = new Disapproval.Collection();
         this.x_axis.chart = this;
       }
+      this.x_axis.new_values = labels;
+    },
+
+    _setAxes: function () {
+      if (globalOptions.multiple_charts_align_left_axes) {
+
+        var max_left_label_width = _.max(_.map(all_charts, function (chart) {
+          return chart.canvas.left.label.width;
+        }));
+        if (this.canvas.left.label.width < max_left_label_width) this.canvas.left.label.width = max_left_label_width;
+        this._setCanvas();
+      }
+      this.y_axis.set(this.y_axis.new_values);
+      this.x_axis.set(this.x_axis.new_values);
     },
 
     _setThreshold: function () {
@@ -1121,30 +1143,68 @@
       });
     },
 
+    _calculateLabelDimensions: function() {
+      this._calculateYLabel();
+      this._calculateXLabels();
+    },
+
+    _calculateYLabel: function () {
+      var label_text;
+      if (this.y_axis && this.y_axis.new_values) {
+        // calculate what will be the widest text label
+        // perferring highest value with choose the widest rendered string
+        // e.g. 1000 is wider than 87.5
+        var max_length = 0;
+        _.each(this.y_axis.new_values, function (value) {
+          if (value.label.length >= max_length) {
+            max_length = value.label.length;
+            label_text = value.label;
+          }
+        });
+      } else {
+        label_text = String(this.bounds.y_max);
+      }
+
+      // create svg text element and to append it to the DOM in order to get width
+      var label = svg$el('text').html(label_text).attr({
+        'font-family': globalOptions.axes_font_family,
+        'font-size': globalOptions.axes_font_size
+      }); // Change from String to the correct function this if labels are formatted
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
+      $('body').append(temp_svg);
+      temp_svg.append(label);
+      this.canvas.left.label = {
+        width: label.width(),
+        height: globalOptions.axes_font_size
+      }
+      temp_svg.remove();
+    },
+
+    _calculateXLabels: function () {
+      this.canvas.bottom.label = {
+        width: 0,
+        height: globalOptions.axes_font_size
+      };
+
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
+      $('body').append(temp_svg);
+      _.each(this.labels, function (label) {
+        label = svg$el('text').html(label.label);
+        temp_svg.append(label);
+        var width = label.width();
+        if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
+      }, this);
+      temp_svg.remove();
+    },
+
     _setCanvas: function () {
       this._setCanvasWidths();
       this._setCanvasHeights();
     },
 
     _setCanvasWidths: function () {
-      var temp_svg = svg$el('svg');
-      var label = svg$el('text').html(String(this.bounds.y_max)).attr({
-        fill: globalOptions.axes_font_color,
-        'font-family': globalOptions.axes_font_family,
-        'font-size': globalOptions.axes_font_size
-      }); // Change from String to the correct function this if labels are formatted
-      temp_svg.append(label);
-      $('body').append(temp_svg);
-
-      this.canvas.left.label = {
-        width: label.width(),
-        height: globalOptions.axes_font_size
-      }
-      temp_svg.remove();
-
       var padding = 10;
       var width = this.canvas.left.label.width + padding;
-      if (width < globalOptions.y_axis_min_width) width = globalOptions.y_axis_min_width;
       this.canvas.left.width = this.canvas.bottom.offset.x = this.canvas.main.offset.x = width;
       this.canvas.bottom.width = this.canvas.main.width = this.width - width;
     },
@@ -1152,31 +1212,11 @@
     _setCanvasHeights: function () {
       var padding = 10;
 
-      var temp_svg = svg$el('svg');
-      $('body').append(temp_svg);
-
-      this.canvas.bottom.label = {
-        width: 0,
-        height: 0
-      };
-
-      _.each(this.labels, function (label) {
-        label = svg$el('text').html(label.label);
-        temp_svg.append(label);
-        var width = label.width();
-        var height = parseInt(label.css('font-size'));
-        if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
-        if (height > this.canvas.bottom.label.height) this.canvas.bottom.label.height = height;
-      }, this);
-      temp_svg.remove();
-
       var label_width = this.canvas.bottom.label.width + padding;
       var max_available_label_space = this.canvas.bottom.width / _.range(this.bounds.x_min, this.bounds.x_max, this.bounds.x_step).length;
-      var height;
-
-      
       var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x
 
+      var height;
       if (label_width > max_available_label_space || label_width / 2 > first_x_tick_x_offset) {
         this.canvas.bottom.label.is_tilted = true;
         height = this.canvas.bottom.label.width / Math.sqrt(2) + 2 * padding;
@@ -1187,6 +1227,12 @@
       }
       this.canvas.bottom.height = height;
       this.canvas.left.height = this.canvas.main.height = this.canvas.bottom.offset.y = this.height - height;
+    },
+
+    // also remove this from the collection of all charts when a chart is removed
+    remove: function () {
+      all_charts = _.without(all_charts, this);
+      Disapproval.View.prototype.remove.call(this);
     },
 
     // public methods
@@ -1217,6 +1263,10 @@
       Disapproval.trigger('window:shrink');
       Disapproval.trigger('window:grow');
       Disapproval.trigger('window:set_size');
+      Disapproval.trigger('window:calculate_label_dimensions'); // best guess at size
+      Disapproval.trigger('window:set_canvas');
+      Disapproval.trigger('window:calculate_axes');
+      Disapproval.trigger('window:calculate_label_dimensions'); // reset after y-axis is known
       Disapproval.trigger('window:set_canvas');
       Disapproval.trigger('window:set_axes');
       Disapproval.trigger('window:set_threshold');
@@ -1301,6 +1351,10 @@
     Disapproval.trigger('window:shrink');
     Disapproval.trigger('window:grow');
     Disapproval.trigger('window:set_size');
+    Disapproval.trigger('window:calculate_label_dimensions'); // best guess at size
+    Disapproval.trigger('window:set_canvas');
+    Disapproval.trigger('window:calculate_axes');
+    Disapproval.trigger('window:calculate_label_dimensions'); // reset after y-axis is known
     Disapproval.trigger('window:set_canvas');
     Disapproval.trigger('window:set_axes');
     Disapproval.trigger('window:set_threshold');
@@ -1374,7 +1428,10 @@
     tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
     tooltip_font_size: 15,
     tooltip_font_weight: 'lighter',
-    tooltip_letter_spacing: 1.8
+    tooltip_letter_spacing: 1.8,
+
+    multiple_charts_align_left_axes: false,
+    multiple_charts_align_right_point: false
   };
 
   function lineChartColoring(i, color_palette) {
@@ -1549,7 +1606,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
@@ -1573,7 +1629,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
@@ -1587,7 +1642,7 @@
         'font-size': globalOptions.axes_font_size
       });
 
-      var temp_svg = svg$el('svg');
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
       temp_svg.append(this.$el);
       $('body').append(temp_svg);
       var width = this.$el.width();
@@ -1607,7 +1662,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
@@ -1678,7 +1732,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
@@ -1702,7 +1755,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
@@ -1716,7 +1768,7 @@
         'font-size': globalOptions.axes_font_size
       });
 
-      var temp_svg = svg$el('svg');
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
       temp_svg.append(this.$el);
       $('body').append(temp_svg);
       var width = this.$el.width();
@@ -1746,7 +1798,6 @@
 
     initialize: function () {
       this.listenTo(this.model, 'remove', this.remove);
-      this.listenTo(this.model, 'change', this.render);
       this.render();
     },
 
