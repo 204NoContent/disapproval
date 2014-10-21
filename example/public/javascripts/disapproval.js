@@ -966,6 +966,8 @@
     this.listenTo(Disapproval, 'window:set_threshold', this._setThreshold);
     if (data) this.reset(data, _.extend({ silent: true }, options));
     this.delegateEvents();
+    this.renderLegend();
+    this.resize();
     this.render();
     all_charts.push(this);
   };
@@ -999,7 +1001,8 @@
 
     _attachToContainer: function () {
       this.$container = $(this.container);
-      this.$container.append(this.$el);
+      this.$chart_container = $('<div>', { class: 'disapproval-chart-container' });
+      $(this.container).append(this.$chart_container.append(this.$el));
     },
 
     _reset: function () {
@@ -1097,6 +1100,7 @@
       // x-axis
       var labels = this.labels;
       while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
+        if (labels.length <= 2) break;
         labels = _.select(labels, function (x, i) { return i % 2 == 0; });
       }
       if (!this.x_axis) {
@@ -1128,15 +1132,16 @@
     },
 
     _grow: function () {
-      // set height of container
-      this.$container.height(Math.round(this.$container.width() / this.aspectRatio));
-      // reset height with possibly updated width from scrollbar being added to screen
-      this.$container.height(Math.round(this.$container.width() / this.aspectRatio));
+      // set best guess at height of container
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
     },
 
     _setSize: function () {
-      this.width = this.$container.width();
-      this.height = this.$container.height();
+      // reset height with possibly updated width from scrollbar being added to screen
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
+      // grab accurate dimensions
+      this.width = this.$chart_container.width();
+      this.height = this.$chart_container.height();
       this.$el.attr({
         width: this.width,
         height: this.height
@@ -1189,7 +1194,10 @@
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
       $('body').append(temp_svg);
       _.each(this.labels, function (label) {
-        label = svg$el('text').html(label.label);
+        label = svg$el('text').html(label.label).attr({
+          'font-family': globalOptions.axes_font_family,
+          'font-size': globalOptions.axes_font_size
+        });
         temp_svg.append(label);
         var width = label.width();
         if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
@@ -1212,9 +1220,9 @@
     _setCanvasHeights: function () {
       var padding = 10;
 
-      var label_width = this.canvas.bottom.label.width + padding;
+      var label_width = this.canvas.bottom.label.width;
       var max_available_label_space = this.canvas.bottom.width / _.range(this.bounds.x_min, this.bounds.x_max, this.bounds.x_step).length;
-      var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x
+      var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x;
 
       var height;
       if (label_width > max_available_label_space || label_width / 2 > first_x_tick_x_offset) {
@@ -1258,8 +1266,10 @@
       this.max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
       this._setBounds();
       if (!options.silent) this.trigger('reset', this, options);
-      // break apart resizing into steps so that all chart instances can execute each step together
-      // before going on to the next
+      return this;
+    },
+
+    resize: function () {
       Disapproval.trigger('window:shrink');
       Disapproval.trigger('window:grow');
       Disapproval.trigger('window:set_size');
@@ -1271,7 +1281,6 @@
       Disapproval.trigger('window:set_axes');
       Disapproval.trigger('window:set_threshold');
       Disapproval.trigger('window:render');
-      return this;
     },
 
     xScale: function (x) {
@@ -1280,6 +1289,12 @@
 
     yScale: function (y) {
       return this.canvas.main.height - y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
+    },
+
+    renderLegend: function () {
+      var legend_view = new LegendView({ model: this });
+      this.$container.append(legend_view.$el);
+      legend_view._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
     },
 
     render: function () {
@@ -1415,9 +1430,8 @@
     axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
     axes_font_size: 12,
     axes_font_color: "rgba(0,0,0,0.7)",
-    y_axis_lower_bound_zero: false,
-    x_axis_lower_bound_zero: false,
-    y_axis_min_width: 0,
+    y_axis_lower_bound_zero: false, // TODO: implement
+    x_axis_lower_bound_zero: false, // TODO: implement
 
     point_radius: 3.8,
     point_stroke_width: 1.2,
@@ -1426,9 +1440,14 @@
 
     tooltip_offset: 10,
     tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    tooltip_font_color: "rgba(255,255,255,1)",
     tooltip_font_size: 15,
     tooltip_font_weight: 'lighter',
     tooltip_letter_spacing: 1.8,
+
+    legend_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    legend_font_color: "rgba(0,0,0,0.7)",
+    legend_font_size: 15,
 
     multiple_charts_align_left_axes: false,
     multiple_charts_align_right_point: false
@@ -1451,98 +1470,6 @@
     return Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
   }
 
-  // LineView 
-  // -------------------
-
-  // A view extention for rendering polylines
-
-  var LineView = Disapproval.View.extend({
-    tagName: 'polyline',
-
-    initialize: function () {
-      this.listenTo(Disapproval, 'window:render', this.render);
-      this.render();
-    },
-
-    render: function () {
-      var points = this.collection.map(function (point) {
-        var x = this.collection.chart.xScale(point.get('x')) + this.collection.chart.canvas.main.offset.x;
-        var y = this.collection.chart.yScale(point.get('y')) + this.collection.chart.canvas.main.offset.y;
-        return x + ' ' + y
-      }, this).join(',');
-      
-      this.$el.attr({
-        points: points,
-        stroke: this.collection.color.strokeColor,
-        fill: 'transparent',
-        'stroke-width': globalOptions.line_stroke_width
-      });
-    }
-  });
-
-  // PointView
-  // -------------------
-
-  // A view extention for rendering points
-
-  var PointView = Disapproval.View.extend({
-    tagName: 'circle',
-
-    initialize: function () {
-      this.chart = this.model.collection.chart;
-      this.listenTo(Disapproval, 'window:render', this.render);
-      this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
-      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlight);
-      this.render();
-    },
-
-    render: function () {
-      var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x;
-      var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
-      this.$el.attr({
-        cx: x,
-        cy: y,
-        r: globalOptions.point_radius,
-        'stroke-width': globalOptions.point_stroke_width
-      });
-      this.style();
-    },
-
-    checkProximity: function (event) {
-      if (this.chart == event.chart) {
-        var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
-        if (Math.abs(delta_x) < this.chart.threshold) {
-          if (!this.is_highlighted) this.highlight();
-        } else if (this.is_highlighted) {
-          this.removeHighlight(event);
-        }
-      }
-    },
-
-    removeHighlight: function (event) {
-      if (this.chart == event.chart) {
-        this.is_highlighted = false;
-        this.chart.tooltipCollection.remove(this.model);
-        this.style();
-      }
-    },
-
-    style: function () {
-      this.$el.attr({
-        fill: this.model.collection.color.pointColor,
-        stroke: this.model.collection.color.pointStrokeColor
-      });
-    },
-
-    highlight: function () {
-      this.$el.attr({
-        fill: this.model.collection.color.pointHighlightFill,
-        stroke: this.model.collection.color.pointHighlightStroke
-      });
-      this.is_highlighted = true;
-      this.chart.tooltipCollection.add(this.model);
-    }
-  });
 
   // LeftView 
   // -------------------
@@ -1847,6 +1774,105 @@
     }
   });
 
+  // LineView
+  // -------------------
+
+  // A view extention for rendering polylines
+
+  var LineView = Disapproval.View.extend({
+    tagName: 'polyline',
+
+    initialize: function () {
+      this.listenTo(Disapproval, 'window:render', this.render);
+      this.render();
+    },
+
+    render: function () {
+      var points = this.collection.map(function (point) {
+        var x = this.collection.chart.xScale(point.get('x')) + this.collection.chart.canvas.main.offset.x;
+        var y = this.collection.chart.yScale(point.get('y')) + this.collection.chart.canvas.main.offset.y;
+        return x + ' ' + y
+      }, this).join(',');
+
+      this.$el.attr({
+        points: points,
+        stroke: this.collection.color.strokeColor,
+        fill: 'transparent',
+        'stroke-width': globalOptions.line_stroke_width
+      });
+    }
+  });
+
+  // PointView
+  // -------------------
+
+  // A view extention for rendering points
+
+  var PointView = Disapproval.View.extend({
+    tagName: 'circle',
+
+    initialize: function () {
+      this.chart = this.model.collection.chart;
+      this.listenTo(Disapproval, 'window:render', this.render);
+      this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
+      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlight);
+      this.render();
+    },
+
+    render: function () {
+      var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x;
+      var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
+      this.$el.attr({
+        cx: x,
+        cy: y,
+        r: globalOptions.point_radius,
+        'stroke-width': globalOptions.point_stroke_width
+      });
+      this.style();
+    },
+
+    checkProximity: function (event) {
+      if (this.chart == event.chart) {
+        var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
+        if (Math.abs(delta_x) < this.chart.threshold) {
+          if (!this.is_highlighted) this.highlight();
+        } else if (this.is_highlighted) {
+          this.removeHighlight(event);
+        }
+      }
+    },
+
+    removeHighlight: function (event) {
+      if (this.chart == event.chart) {
+        this.is_highlighted = false;
+        this.chart.tooltipCollection.remove(this.model);
+        this.style();
+      }
+    },
+
+    style: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.pointColor,
+        stroke: this.model.collection.color.pointStrokeColor
+      });
+    },
+
+    highlight: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.pointHighlightFill,
+        stroke: this.model.collection.color.pointHighlightStroke
+      });
+      this.is_highlighted = true;
+      this.chart.tooltipCollection.add(this.model);
+    }
+  });
+
+
+  // TooltipView
+  // -------------------
+
+  // A view extention for rendering tooltips
+
   var TooltipView = Disapproval.View.extend({
     tagName: 'ul',
     className: 'tooltip list',
@@ -1892,20 +1918,18 @@
 
         this.collection.$container.css('max-width', this.collection.max_width);
 
-        var $main_container = this.collection.chart.$container.find('.canvas-main');
-
         this.collection.$container.show();
         this.collection.$container.offset({
-          top: $main_container.offset().top,
+          top: this.collection.chart.$container.find('.canvas-left').offset().top,
         });
 
         if (this.collection.side == 'left') {
           this.collection.$container.offset({
-            left: $main_container.offset().left + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
+            left: this.collection.chart.$container.find('.canvas-bottom').offset().left + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
           });
         } else {
           this.collection.$container.offset({
-            left: $main_container.offset().left + x_screen + globalOptions.tooltip_offset
+            left: this.collection.chart.$container.find('.canvas-bottom').offset().left + x_screen + globalOptions.tooltip_offset
           })
         }
       }
@@ -1926,6 +1950,11 @@
     },
 
   });
+
+  // TooltipPointView
+  // -------------------
+
+  // A view extention for rendering tooltip models
 
   var TooltipPointView = Disapproval.View.extend({
      tagName: 'li',
@@ -1959,7 +1988,7 @@
 
       tooltip_point.css({
         'margin-left': 20,
-        'color': 'rgba(255,255,255,1)',
+        'color': globalOptions.tooltip_font_color,
         'font-family': globalOptions.tooltip_font_family,
         'font-size': globalOptions.tooltip_font_size,
         'font-weight': globalOptions.tooltip_font_weight,
@@ -1970,6 +1999,177 @@
       this.$el.append(tooltip_point)
     }
 
+  });
+
+  // LegendView
+  // -------------------
+
+  // A view extention for rendering the main section of the chart
+
+  var LegendView = Disapproval.View.extend({
+    tagName: 'ul',
+    className: 'legend',
+
+    events: {
+      'click .toggle-icon': 'toggle'
+    },
+
+    initialize: function () {
+      this.is_collapsed = true;
+      this.listenTo(Disapproval, 'window:render', this._applyCss);
+      this.listenTo(Disapproval, 'window:shrink', this._releaseWidth);
+      this.render();
+    },
+
+    render: function () {
+      this._createToggleIcon();
+
+      // temp ul to contain items in order to figure out max width
+      var $temp_div = $('<div>').css({
+        visibility: 'hidden',
+        position: 'absolute'
+      });
+
+      _.each(this.model.datasets, function (dataset) {
+        var legend_item_view = new LegendItemView({
+          collection: dataset
+        });
+
+        this.$el.append(legend_item_view.$el);
+
+        // add each legend text to temp div
+        $temp_div.append(legend_item_view.$legend_text.clone());
+
+      }, this);
+
+      $('body').append($temp_div);
+      this.max_legend_item_width = $temp_div.width();
+      this._setItemWidth();
+      $temp_div.remove();
+
+      this.$el.css({
+        margin: 0,
+        padding: 0,
+        border: '1px solid rgba(0,0,0,0.2)',
+        position: 'relative'
+      });
+    },
+
+    toggle: function () {
+      this.is_collapsed = !this.is_collapsed;
+      this._applyCss();
+    },
+
+    _isOverflowing: function () {
+      var $li = this.$el.find('li');
+      this.legend_item_outer_height = $li.outerHeight(true);
+      this.$el.css({ height: 'auto' });
+      return (this.$el.height() > this.legend_item_outer_height);
+    },
+
+    _applyCss: function () {
+      this._setItemWidth();
+      // for aesthetic reasons, set the width so lengend only resizes along with chart
+      this.$el.outerWidth(this.model.width);
+
+      if (!this._isOverflowing()) {
+        if (this.$toggle_icon) {
+          this.$toggle_icon.hide();
+        }
+        return;
+      }
+      if (this.is_collapsed) {
+        this.$el.css({
+          overflow: 'hidden',
+          height: this.legend_item_outer_height
+        });
+        this.$toggle_icon.html('+');
+        this.$toggle_icon.show();
+      } else {
+        this.$el.css({
+          overflow: 'visible',
+          height:  'auto'
+        });
+        this.$toggle_icon.html('-');
+        this.$toggle_icon.show();
+      }
+    },
+
+    _setItemWidth: function () {
+      if (this.model.$chart_container.width() > 2 * this.max_legend_item_width) {
+        this.$el.find('li').width(this.max_legend_item_width + 2).css({ display: 'inline-block' });; // + 2 for possible rendering inaccuracy
+      } else {
+        this.$el.find('li').width('auto').css({ display: 'block' });
+      }
+    },
+
+    _createToggleIcon: function () {
+      this.$toggle_icon = $('<div>', { class: 'toggle-icon' }).css({
+        position: 'absolute',
+        top: 0,
+        right: 0,
+        color: '#666',
+        'line-height': '14px',
+        width: 20,
+        height: 20,
+        'font-size': 20,
+        'text-align': 'center',
+        'font-family': globalOptions.legend_font_family,
+        cursor: 'pointer',
+        '-webkit-touch-callout': 'none',
+        '-webkit-user-select': 'none',
+        '-khtml-user-select': 'none',
+        '-moz-user-select': 'none',
+        '-ms-user-select': 'none',
+        'user-select': 'none'
+      })
+      this.$el.append(this.$toggle_icon);
+    },
+
+    _releaseWidth: function () {
+      this.$el.width('auto');
+    }
+
+  });
+
+
+  // LegendItemView
+  // -------------------
+
+  // A view extention for rendering legend items
+
+  var LegendItemView = Disapproval.View.extend({
+    tagName: 'li',
+
+    initialize: function () {
+      this.render();
+    },
+
+    render: function () {
+      this.$el.append($('<div>', { class: 'legend-color' }).css({
+        position: 'absolute',
+        width: 8,
+        height: 8,
+        'margin-top': 4,
+        'background-color': this.collection.color.strokeColor
+      }));
+
+      this.$legend_text = $('<div>', { class: 'legend-text' }).html(this.collection.name);
+
+      this.$legend_text.css({
+        'margin-left': 20,
+        'color': globalOptions.legend_font_color,
+        'font-family': globalOptions.legend_font_family,
+        'font-size': globalOptions.legend_font_size
+      });
+
+      this.$el.css({
+        display: 'inline-block',
+        'margin': 10
+      });
+
+      this.$el.append(this.$legend_text);
+    }
   });
 
 
