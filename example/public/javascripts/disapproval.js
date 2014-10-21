@@ -1919,17 +1919,18 @@
         this.collection.$container.css('max-width', this.collection.max_width);
 
         this.collection.$container.show();
+        var offset = this.collection.chart.$chart_container.offset();
         this.collection.$container.offset({
-          top: this.collection.chart.$container.find('.canvas-left').offset().top,
+          top: offset.top,
         });
 
         if (this.collection.side == 'left') {
           this.collection.$container.offset({
-            left: this.collection.chart.$container.find('.canvas-bottom').offset().left + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
+            left: offset.left + this.collection.chart.canvas.left.width + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
           });
         } else {
           this.collection.$container.offset({
-            left: this.collection.chart.$container.find('.canvas-bottom').offset().left + x_screen + globalOptions.tooltip_offset
+            left: offset.left + this.collection.chart.canvas.left.width + x_screen + globalOptions.tooltip_offset
           })
         }
       }

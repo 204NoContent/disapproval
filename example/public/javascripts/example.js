@@ -44,7 +44,7 @@ $(document).ready(function () {
     datasets: _.map(_.range(1, 31), function (i) {
       if (i == 0) {
         return {
-          name: 'Dataset that has a long name: ' + i,
+          name: 'Dataset that has a very long name: ' + i,
           x: _.range(0, 30 + 1),
           y: _.map(_.range(0, 30 + 1), function () { return 0; }),
           meta: _.map(_.range(0, 30 + 1), function () {
@@ -53,7 +53,7 @@ $(document).ready(function () {
         };
       } else {
         return {
-          name: 'Dataset that has a long name: ' + i,
+          name: 'Dataset that has a very long name: ' + i,
           x: _.range(0, 30 + 1),
           y: _.range(0, 30 * (i + 1) + 30, i),
           meta: _.map(_.range(0, 30 * (i + 1) + 30, i), function () {
