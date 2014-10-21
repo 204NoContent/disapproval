@@ -1765,7 +1765,8 @@
 
         dataset.each(function (point) {
           var point_view = new PointView({
-            model: point
+            model: point,
+            collection: dataset
           });
 
           this.$el.append(point_view.$el);
@@ -1815,7 +1816,9 @@
       this.chart = this.model.collection.chart;
       this.listenTo(Disapproval, 'window:render', this.render);
       this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
-      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlight);
+      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlightAndTooltip);
+      this.listenTo(this.collection, 'highlight', this.highlight);
+      this.listenTo(this.collection, 'remove_highlight', this.removeHighlight);
       this.render();
     },
 
@@ -1835,19 +1838,25 @@
       if (this.chart == event.chart) {
         var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
         if (Math.abs(delta_x) < this.chart.threshold) {
-          if (!this.is_highlighted) this.highlight();
+          if (!this.is_highlighted) {
+            this.highlight();
+            this.chart.tooltipCollection.add(this.model);
+          }
         } else if (this.is_highlighted) {
           this.removeHighlight(event);
+          this.chart.tooltipCollection.remove(this.model);
         }
       }
     },
 
-    removeHighlight: function (event) {
-      if (this.chart == event.chart) {
-        this.is_highlighted = false;
-        this.chart.tooltipCollection.remove(this.model);
-        this.style();
-      }
+    removeHighlightAndTooltip: function () {
+      this.removeHighlight(event);
+      this.chart.tooltipCollection.remove(this.model);
+    },
+
+    removeHighlight: function () {
+      this.style();
+      this.is_highlighted = false;
     },
 
     style: function () {
@@ -1857,13 +1866,12 @@
       });
     },
 
-    highlight: function () {
+    highlight: function (event) {
       this.$el.attr({
         fill: this.model.collection.color.pointHighlightFill,
         stroke: this.model.collection.color.pointHighlightStroke
       });
       this.is_highlighted = true;
-      this.chart.tooltipCollection.add(this.model);
     }
   });
 
@@ -2142,6 +2150,11 @@
   var LegendItemView = Disapproval.View.extend({
     tagName: 'li',
 
+    events: {
+      'mouseenter': 'highlight',
+      'mouseleave': 'removeHighlight'
+    },
+
     initialize: function () {
       this.render();
     },
@@ -2161,7 +2174,8 @@
         'margin-left': 20,
         'color': globalOptions.legend_font_color,
         'font-family': globalOptions.legend_font_family,
-        'font-size': globalOptions.legend_font_size
+        'font-size': globalOptions.legend_font_size,
+        cursor: 'default'
       });
 
       this.$el.css({
@@ -2170,6 +2184,14 @@
       });
 
       this.$el.append(this.$legend_text);
+    },
+
+    highlight: function () {
+      this.collection.trigger('highlight')
+    },
+
+    removeHighlight: function () {
+      this.collection.trigger('remove_highlight')
     }
   });
 
