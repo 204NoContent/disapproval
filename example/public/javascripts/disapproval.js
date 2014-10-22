@@ -949,6 +949,7 @@
   // its models in sort order, as they're added and removed.
 
   var Chart = Disapproval.Chart = function (data, options) {
+    all_charts.push(this);
     this.cid = _.uniqueId('view');
     options || (options = {});
     _.extend(this, _.pick(options, chartOptions));
@@ -969,7 +970,6 @@
     this.renderLegend();
     this.resize();
     this.render();
-    all_charts.push(this);
   };
 
   // List of chart options to be merged as properties.
@@ -1020,14 +1020,23 @@
     _setBounds: function () {
       // TODO: this could be optimized, especially for fixed x-range
       _.each(this.datasets, function (dataset) {
-        var x_min = _.min(dataset.pluck('x'));
         var x_max = _.max(dataset.pluck('x'));
-        var y_min = _.min(dataset.pluck('y'));
         var y_max = _.max(dataset.pluck('y'));
-        if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
         if ( x_max > this.data_range.x_max) this.data_range.x_max = x_max;
-        if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
         if ( y_max > this.data_range.y_max) this.data_range.y_max = y_max;
+
+        if (this.data_range.y_min != 0 && globalOptions.y_axis_lower_bound_zero) {
+          this.data_range.y_min = 0;
+        } else {
+          var y_min = _.min(dataset.pluck('y'));
+          if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
+        }
+        if (this.data_range.x_min != 0 && globalOptions.x_axis_lower_bound_zero) {
+          this.data_range.x_min = 0;
+        } else {
+          var x_min = _.min(dataset.pluck('x'));
+          if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
+        }
       }, this);
 
       var natural_y_bounds = this._naturalBoundsY();
@@ -1049,30 +1058,40 @@
         step /= 2;
       }
       var lower_bound;
-      if (this.data_range.y_min >= 0 && this.data_range.y_min <= step) {
+      if (this.data_range.y_min >= 0 && this.data_range.y_min < step) {
         lower_bound = 0;
       } else {
         lower_bound = Math.floor(this.data_range.y_min / step) * step;
       }
 
-      var upper_bound = this.data_range.y_max + step / 2;
+      var upper_bound = Math.ceil(this.data_range.y_max / step) * step + step / 2;
       return { min: lower_bound, max: upper_bound, step: step };
     },
 
     _naturalBoundsX: function () {
-      var step = (this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1)
+      var label_min = _.max(_.filter(this.labels, function (label) { return label.x < this.data_range.x_min; }, this), function (label) { return label.x });
+      var label_max = _.min(_.filter(this.labels, function (label) { return label.x > this.data_range.x_max; }, this), function (label) { return label.x });
+
+      var labels = _.reject(this.labels, function (label) {
+        return (label.x < label_min.x || label.x > label_max.x);
+      });
+
+      var step = (label_max.x - label_min.x) / ( labels.length - 1)
+
       var lower_bound;
-      if (this.data_range.x_min >= 0 && this.data_range.x_min <= step) {
+      if (this.data_range.x_min >= 0 && this.data_range.x_min < step) {
         lower_bound = 0;
       } else {
-        lower_bound = Math.floor(this.data_range.x_min - step);
+        lower_bound = label_min.x;
       }
 
       var upper_bound;
       if (globalOptions.multiple_charts_align_right_point) {
-        upper_bound = 1.04 * this.data_range.x_max - lower_bound;
-      } else {
+        upper_bound = lower_bound + (this.data_range.x_max - lower_bound) * 1.04;
+      } else if (label_max.x - step == this.data_range.x_max) {
         upper_bound = this.data_range.x_max + step / 2;
+      } else {
+        upper_bound = label_max.x + step / 2;
       }
       return { min: lower_bound, max: upper_bound, step: step };
     },
@@ -1098,11 +1117,14 @@
       this.y_axis.new_values = y_values;
 
       // x-axis
-      var labels = this.labels;
+      var labels = _.reject(this.labels, function (label) {
+        return (label.x < this.bounds.x_min || label.x > this.bounds.x_max)
+      }, this);
       while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
         if (labels.length <= 2) break;
         labels = _.select(labels, function (x, i) { return i % 2 == 0; });
       }
+
       if (!this.x_axis) {
         this.x_axis = new Disapproval.Collection();
         this.x_axis.chart = this;
@@ -1112,13 +1134,23 @@
 
     _setAxes: function () {
       if (globalOptions.multiple_charts_align_left_axes) {
-
         var max_left_label_width = _.max(_.map(all_charts, function (chart) {
           return chart.canvas.left.label.width;
         }));
         if (this.canvas.left.label.width < max_left_label_width) this.canvas.left.label.width = max_left_label_width;
         this._setCanvas();
+
       }
+      if (globalOptions.multiple_charts_align_right_point) {
+        var min_total_canvas_width = _.min(_.map(all_charts, function (chart) {
+          return chart.canvas.main.width + chart.canvas.left.width;
+        }));
+        if (this.canvas.main.width + this.canvas.left.width > min_total_canvas_width) {
+          this.canvas.bottom.width = this.canvas.main.width = min_total_canvas_width - this.canvas.left.width;
+          this._setCanvasHeights();
+        }
+      }
+
       this.y_axis.set(this.y_axis.new_values);
       this.x_axis.set(this.x_axis.new_values);
     },
@@ -1284,12 +1316,21 @@
     },
 
     xScale: function (x) {
-      return x * this.canvas.main.width / (this.bounds.x_max - this.bounds.x_min);
+      return this.canvas.main.width * (x - this.bounds.x_min) / (this.bounds.x_max - this.bounds.x_min);
     },
 
     yScale: function (y) {
-      return this.canvas.main.height - y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
+      return this.canvas.main.height * (1 - (y - this.bounds.y_min)  / (this.bounds.y_max - this.bounds.y_min));
     },
+
+    // TODO: delete these
+    // inverseXScale: function (x) {
+    //   return x * (this.bounds.x_max - this.bounds.x_min) / this.canvas.main.width + this.bounds.x_min;
+    // },
+
+    // inverseYScale: function (y) {
+    //   return (1 - y / this.canvas.main.height) * (this.bounds.y_max - this.bounds.y_min) + this.bounds.y_min;
+    // },
 
     renderLegend: function () {
       var legend_view = new LegendView({ model: this });
@@ -1430,8 +1471,8 @@
     axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
     axes_font_size: 12,
     axes_font_color: "rgba(0,0,0,0.7)",
-    y_axis_lower_bound_zero: false, // TODO: implement
-    x_axis_lower_bound_zero: false, // TODO: implement
+    x_axis_lower_bound_zero: false,
+    y_axis_lower_bound_zero: false,
 
     point_radius: 3.8,
     point_stroke_width: 1.2,

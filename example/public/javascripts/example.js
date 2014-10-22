@@ -1,43 +1,58 @@
 $(document).ready(function () {
   // fake some data
-  var data = {
-    labels: _.map(_.range(0, 11), function (i) {
+  // var data = {
+    // labels: _.map(_.range(0, 11), function (i) {
+    //   return {
+    //     x: i,
+    //     label: 'x label: ' + i
+    //   };
+    // }),
+  //   datasets: _.map(_.range(1, 11), function (i) {
+  //     if (i == 0) {
+  //       return {
+  //         name: 'Dataset ' + i,
+  //         x: _.range(0, 10 + 1),
+  //         y: _.map(_.range(0, 10 + 1), function () { return 0; }),
+  //         meta: _.map(_.range(0, 10 + 1), function () {
+  //           return 'Line ' + i;
+  //         })
+  //       };
+  //     } else {
+  //       return {
+  //         name: 'Dataset ' + i,
+  //         x: _.range(0, 10 + 1),
+  //         y: _.range(0, 10 * (i + 1) + 10, i),
+  //         meta: _.map(_.range(0, 10 * (i + 1) + 10, i), function () {
+  //           return 'Line ' + i;
+  //         })
+  //       };
+  //     }
+  //   })
+  // };
+
+  var single_dataset_data = {
+    labels: _.map(_.range(-2, 12 + 1), function (i) {
       return {
-        x: i, 
+        x: i,
         label: 'x label: ' + i
       };
     }),
-    datasets: _.map(_.range(1, 11), function (i) {
-      if (i == 0) {
-        return {
-          name: 'Dataset ' + i,
-          x: _.range(0, 10 + 1),
-          y: _.map(_.range(0, 10 + 1), function () { return 0; }),
-          meta: _.map(_.range(0, 10 + 1), function () {
-            return 'Line ' + i;
-          })
-        };
-      } else {
-        return {
-          name: 'Dataset ' + i,
-          x: _.range(0, 10 + 1),
-          y: _.range(0, 10 * (i + 1) + 10, i),
-          meta: _.map(_.range(0, 10 * (i + 1) + 10, i), function () {
-            return 'Line ' + i;
-          })
-        };
-      }
-    })
-  };
+    datasets: [{
+      name: 'Single Dataset',
+      x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
+      y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
+      meta: []
+    }]
+  }
 
   $('<div>', { id: 'chart-container' }).css('margin-bottom', 40).appendTo('body');
   // make a new chart
-  var chart = new Disapproval.Chart(data, { container: '#chart-container' });
+  var chart = xxx = new Disapproval.Chart(single_dataset_data, { container: '#chart-container' });
 
   var data2 = {
-    labels: _.map(_.range(0, 31), function (i) {
+    labels: _.map(_.range(-1, 32), function (i) {
       return {
-        x: i, 
+        x: i,
         label: 'x label that is very long: ' + i
       };
     }),
