@@ -1156,7 +1156,20 @@
     },
 
     _setThreshold: function () {
-      this.threshold = this.xScale(this.data_range.x_max - this.data_range.x_min) / (this.max_points - 1) / 2;
+      _.each(this.datasets, function (dataset) {
+        dataset.each(function (point, i) {
+          if (dataset.models[i + 1]) {
+            var threshold = this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2;
+            point.set('threshold_right', threshold);
+            if (i == 0) {
+              point.set('threshold_left', this.xScale(point.get('x')));
+            }
+            dataset.models[i + 1].set('threshold_left', threshold);
+          } else {
+            point.set('threshold_right', this.canvas.main.width - this.xScale(point.get('x')));
+          }
+        }, this);
+      }, this);
     },
 
     _shrink: function () {
@@ -1240,6 +1253,9 @@
     _setCanvas: function () {
       this._setCanvasWidths();
       this._setCanvasHeights();
+      if (this.canvas.bottom.label.is_tilted) {
+        this._alterCanvasWidthsForTiltedLabels();
+      }
     },
 
     _setCanvasWidths: function () {
@@ -1258,15 +1274,18 @@
 
       var height;
       if (label_width > max_available_label_space || label_width / 2 > first_x_tick_x_offset) {
-        this.canvas.bottom.label.is_tilted = true;
         height = this.canvas.bottom.label.width / Math.sqrt(2) + 2 * padding;
-        this.canvas.bottom.width = this.canvas.main.width = this.canvas.bottom.width - this.canvas.bottom.label.width / Math.sqrt(2);
+        this.canvas.bottom.label.is_tilted = true;
       } else {
         height = this.canvas.bottom.label.height + 2 * padding;
         this.canvas.bottom.label.is_tilted = false;
       }
       this.canvas.bottom.height = height;
       this.canvas.left.height = this.canvas.main.height = this.canvas.bottom.offset.y = this.height - height;
+    },
+    
+    _alterCanvasWidthsForTiltedLabels: function () {
+      this.canvas.bottom.width = this.canvas.main.width = this.canvas.bottom.width - this.canvas.bottom.label.width / Math.sqrt(2);
     },
 
     // also remove this from the collection of all charts when a chart is removed
@@ -1316,11 +1335,19 @@
     },
 
     xScale: function (x) {
-      return this.canvas.main.width * (x - this.bounds.x_min) / (this.bounds.x_max - this.bounds.x_min);
+      return this.xConversion(x - this.bounds.x_min);
+    },
+
+    xConversion: function (x) {
+      return x * this.canvas.main.width / (this.bounds.x_max - this.bounds.x_min);
     },
 
     yScale: function (y) {
-      return this.canvas.main.height * (1 - (y - this.bounds.y_min)  / (this.bounds.y_max - this.bounds.y_min));
+      return this.yConversion(y - this.bounds.y_min);
+    },
+
+    yConversion: function (y) {
+      return this.canvas.main.height * (1 - y / (this.bounds.y_max - this.bounds.y_min));
     },
 
     // TODO: delete these
@@ -1491,7 +1518,7 @@
     legend_font_size: 15,
 
     multiple_charts_align_left_axes: false,
-    multiple_charts_align_right_point: false
+    multiple_charts_align_right_point: true
   };
 
   function lineChartColoring(i, color_palette) {
@@ -1878,7 +1905,8 @@
     checkProximity: function (event) {
       if (this.chart == event.chart) {
         var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
-        if (Math.abs(delta_x) < this.chart.threshold) {
+        var threshold = (delta_x < 0 ? this.model.get('threshold_left') : this.model.get('threshold_right'));
+        if (Math.abs(delta_x) < threshold) {
           if (!this.is_highlighted) {
             this.highlight();
             this.chart.tooltipCollection.add(this.model);
@@ -1907,7 +1935,7 @@
       });
     },
 
-    highlight: function (event) {
+    highlight: function () {
       this.$el.attr({
         fill: this.model.collection.color.pointHighlightFill,
         stroke: this.model.collection.color.pointHighlightStroke

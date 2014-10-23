@@ -38,7 +38,12 @@ $(document).ready(function () {
       };
     }),
     datasets: [{
-      name: 'Single Dataset',
+      name: 'Dataset 1',
+      x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
+      y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
+      meta: []
+    }, {
+      name: 'Dataset 2',
       x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
       y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
       meta: []
