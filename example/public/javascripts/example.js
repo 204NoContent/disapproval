@@ -30,6 +30,26 @@ $(document).ready(function () {
   //   })
   // };
 
+  // var positive_negative_dataset = {
+  //   labels: _.map(_.range(-30, 30 + 1), function (i) {
+  //     return {
+  //       x: i,
+  //       label: 'x label: ' + i
+  //     };
+  //   }),
+  //   datasets: [{
+  //     name: 'Dataset 1',
+  //     x: _.map(_.range(1, 10 + 1), function (i) { return -5 + i + Math.random(); }),
+  //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random() - 1.5; }),
+  //     meta: []
+  //   }, {
+  //     name: 'Dataset 2',
+  //     x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
+  //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
+  //     meta: []
+  //   }]
+  // }
+
   var single_dataset_data = {
     labels: _.map(_.range(-2, 12 + 1), function (i) {
       return {
@@ -38,12 +58,7 @@ $(document).ready(function () {
       };
     }),
     datasets: [{
-      name: 'Dataset 1',
-      x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
-      y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-      meta: []
-    }, {
-      name: 'Dataset 2',
+      name: 'Single Dataset',
       x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
       y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
       meta: []

@@ -1020,22 +1020,20 @@
     _setBounds: function () {
       // TODO: this could be optimized, especially for fixed x-range
       _.each(this.datasets, function (dataset) {
+        var x_min = _.min(dataset.pluck('x'));
         var x_max = _.max(dataset.pluck('x'));
+        var y_min = _.min(dataset.pluck('y'));
         var y_max = _.max(dataset.pluck('y'));
+        if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
         if ( x_max > this.data_range.x_max) this.data_range.x_max = x_max;
+        if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
         if ( y_max > this.data_range.y_max) this.data_range.y_max = y_max;
 
-        if (this.data_range.y_min != 0 && globalOptions.y_axis_lower_bound_zero) {
+        if (this.data_range.y_min > 0 && globalOptions.y_axis_lower_bound_zero) {
           this.data_range.y_min = 0;
-        } else {
-          var y_min = _.min(dataset.pluck('y'));
-          if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
         }
-        if (this.data_range.x_min != 0 && globalOptions.x_axis_lower_bound_zero) {
+        if (this.data_range.x_min > 0 && globalOptions.x_axis_lower_bound_zero) {
           this.data_range.x_min = 0;
-        } else {
-          var x_min = _.min(dataset.pluck('x'));
-          if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
         }
       }, this);
 
@@ -1159,14 +1157,14 @@
       _.each(this.datasets, function (dataset) {
         dataset.each(function (point, i) {
           if (dataset.models[i + 1]) {
-            var threshold = this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2;
+            var threshold = Math.abs(this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2);
             point.set('threshold_right', threshold);
             if (i == 0) {
-              point.set('threshold_left', this.xScale(point.get('x')));
+              point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // a good guess
             }
             dataset.models[i + 1].set('threshold_left', threshold);
           } else {
-            point.set('threshold_right', this.canvas.main.width - this.xScale(point.get('x')));
+            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // a good guess
           }
         }, this);
       }, this);
@@ -1518,7 +1516,7 @@
     legend_font_size: 15,
 
     multiple_charts_align_left_axes: false,
-    multiple_charts_align_right_point: true
+    multiple_charts_align_right_point: false
   };
 
   function lineChartColoring(i, color_palette) {
