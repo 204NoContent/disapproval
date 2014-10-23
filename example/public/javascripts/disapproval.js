@@ -1969,7 +1969,9 @@
     },
 
     render: _.debounce(function () {
-
+      // blow away tooltip html in order to preserve order
+      // TODO: implement smart update
+      this.$el.html('');
       this.collection.each(function (point) {
         this.$el.append(new TooltipPointView({ model: point }).$el);
       }, this);
@@ -1979,18 +1981,19 @@
 
     setTooltipPosition: function () {
       if (this.collection.models.length > 0) {
-        var x = this.collection.first().get('x');
-        var x_screen = this.collection.chart.xScale(x);
-        if (x_screen > this.collection.chart.canvas.main.width / 2) {
+        var x_min = this.collection.chart.xScale(_.min(this.collection.map(function (point) { return point.get('x'); })));
+        var x_max = this.collection.chart.xScale(_.max(this.collection.map(function (point) { return point.get('x'); })));
+
+        if (x_min > this.collection.chart.canvas.main.width / 2) {
           this.collection.side = 'left';
         } else {
           this.collection.side = 'right';
         }
 
         if (this.collection.side == 'left') {
-          this.collection.max_width = x_screen - 2 * globalOptions.tooltip_offset;
+          this.collection.max_width = x_min - 2 * globalOptions.tooltip_offset;
         } else {
-          this.collection.max_width = this.collection.chart.canvas.main.width - x_screen - 2 * globalOptions.tooltip_offset;
+          this.collection.max_width = this.collection.chart.canvas.main.width - x_max - 2 * globalOptions.tooltip_offset;
         }
 
         this.collection.$container.css('max-width', this.collection.max_width);
@@ -2003,11 +2006,11 @@
 
         if (this.collection.side == 'left') {
           this.collection.$container.offset({
-            left: offset.left + this.collection.chart.canvas.left.width + x_screen - this.collection.$container.width() - globalOptions.tooltip_offset
+            left: offset.left + this.collection.chart.canvas.left.width + x_min - this.collection.$container.width() - globalOptions.tooltip_offset
           });
         } else {
           this.collection.$container.offset({
-            left: offset.left + this.collection.chart.canvas.left.width + x_screen + globalOptions.tooltip_offset
+            left: offset.left + this.collection.chart.canvas.left.width + x_max + globalOptions.tooltip_offset
           })
         }
       }
