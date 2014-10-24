@@ -1079,10 +1079,11 @@
       var step;
 
       if (globalOptions.type == 'bar') {
-        lower_bound = this.labels[0].x;
-        upper_bound = _.last(this.labels).x;
-        step = (upper_bound - lower_bound) / ( this.labels.length - 1);
-        return { min: lower_bound - step, max: upper_bound + step, step: step };
+        lower_bound = this.data_range.x_min
+        upper_bound = this.data_range.x_max
+        step = (upper_bound - lower_bound) / ( this.datasets[0].length - 1);
+        var chart_padding = step * 3 / 4;
+        return { min: lower_bound - chart_padding, max: upper_bound + chart_padding, step: step };
       }
 
       var label_min = _.max(_.filter(this.labels, function (label) { return label.x < this.data_range.x_min; }, this), function (label) { return label.x });
@@ -1531,7 +1532,7 @@
 
     line_stroke_width: 2,
 
-    bar_stroke_width: 1.5,
+    bar_stroke_width: 2,
     bar_spacing: 10,
 
     tooltip_offset: 10,
@@ -1557,9 +1558,9 @@
       pointStrokeColor: "#fff",
       pointHighlightFill: "#fff",
       pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
-      barFillColor: 'rgba(' + color_palette[i] + ',0.65)',
-      barStrokeColor: 'rgba(' + color_palette[i] + ',0.9)',
-      barHighlightFill: 'rgba(' + color_palette[i] + ',0.8)',
+      barFillColor: 'rgba(' + color_palette[i] + ',0.75)',
+      barStrokeColor: 'rgba(' + color_palette[i] + ',0.85)',
+      barHighlightFill: 'rgba(' + color_palette[i] + ',0.95)',
       barHighlightStroke: 'rgba(' + color_palette[i] + ',1)'
     };
   }
@@ -2016,7 +2017,8 @@
         y: y,
         width: width,
         height: height,
-        'stroke-width': globalOptions.bar_stroke_width
+        'stroke-width': globalOptions.bar_stroke_width,
+        'shape-rendering': 'crispEdges'
       });
       this.style();
     },
@@ -2092,10 +2094,11 @@
       } else {
           $(this.$('li')[position - 1]).after(tooltipPointView.el);
       }
+
       this.setTooltipPosition();
     },
 
-    setTooltipPosition: function () {
+    setTooltipPosition: _.debounce(function () {
       if (this.collection.models.length > 0) {
         var x_min = this.collection.chart.xScale(_.min(this.collection.map(function (point) { return point.get('x'); })));
         var x_max = this.collection.chart.xScale(_.max(this.collection.map(function (point) { return point.get('x'); })));
@@ -2131,7 +2134,7 @@
         }
       }
 
-    },
+    }, 10),
 
     checkTooltip: function (model) {
       if (this.collection.length == 0) this.collection.$container.hide();
