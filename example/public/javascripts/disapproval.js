@@ -1074,6 +1074,17 @@
     },
 
     _naturalBoundsX: function () {
+      var lower_bound;
+      var upper_bound;
+      var step;
+
+      if (globalOptions.type == 'bar') {
+        lower_bound = this.labels[0].x;
+        upper_bound = _.last(this.labels).x;
+        step = (upper_bound - lower_bound) / ( this.labels.length - 1);
+        return { min: lower_bound - step, max: upper_bound + step, step: step };
+      }
+
       var label_min = _.max(_.filter(this.labels, function (label) { return label.x < this.data_range.x_min; }, this), function (label) { return label.x });
       var label_max = _.min(_.filter(this.labels, function (label) { return label.x > this.data_range.x_max; }, this), function (label) { return label.x });
 
@@ -1081,16 +1092,14 @@
         return (label.x < label_min.x || label.x > label_max.x);
       });
 
-      var step = (label_max.x - label_min.x) / ( labels.length - 1)
+      step = (label_max.x - label_min.x) / ( labels.length - 1)
 
-      var lower_bound;
       if (this.data_range.x_min >= 0 && this.data_range.x_min < step) {
         lower_bound = 0;
       } else {
         lower_bound = label_min.x;
       }
 
-      var upper_bound;
       if (globalOptions.multiple_charts_align_right_point) {
         // NOTE: This approach only works if the left axes are also aligned
         // otherwise the right points will be off by 4% of the difference
@@ -1325,6 +1334,14 @@
         dataset_collection.chart = this;
         return dataset_collection;
       }, this);
+      if (globalOptions.type == 'bar') {
+        if (this.datasets.length > 1) {
+          // bar charts are for one dataset only
+          globalOptions.type = 'line';
+        } else {
+          globalOptions.y_axis_lower_bound_zero = true;
+        }
+      }
       this.max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
       this._setBounds();
       if (!options.silent) this.trigger('reset', this, options);
@@ -1340,11 +1357,11 @@
     },
 
     yScale: function (y) {
-      return this.yConversion(y - this.bounds.y_min);
+      return this.canvas.main.height - this.yConversion(y - this.bounds.y_min);
     },
 
     yConversion: function (y) {
-      return this.canvas.main.height * (1 - y / (this.bounds.y_max - this.bounds.y_min));
+      return y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
     },
 
     // TODO: delete these
@@ -1357,9 +1374,11 @@
     // },
 
     renderLegend: function () {
-      var legend_view = new LegendView({ model: this });
-      this.$container.append(legend_view.$el);
-      legend_view._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
+      if (this.datasets.length > 1) {
+        var legend_view = new LegendView({ model: this });
+        this.$container.append(legend_view.$el);
+        legend_view._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
+      }
     },
 
     render: function () {
@@ -1449,6 +1468,7 @@
     'circle',
     'line',
     'polyline',
+    'rect',
     'svg',
     'text'
   ];
@@ -1490,6 +1510,8 @@
   ];
 
   var globalOptions = {
+    type: 'bar',
+
     aspect_ratio: 16 / 9,
 
     grid_stroke_color: "rgba(0,0,0,0.06)",
@@ -1509,6 +1531,9 @@
 
     line_stroke_width: 2,
 
+    bar_stroke_width: 1.5,
+    bar_spacing: 10,
+
     tooltip_offset: 10,
     tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
     tooltip_font_color: "rgba(255,255,255,1)",
@@ -1527,12 +1552,15 @@
   function chartColoring(i, color_palette) {
     i = i % color_palette.length;
     return {
-      fillColor: 'rgba(' + color_palette[i] + ',0.8)',
-      strokeColor: 'rgba(' + color_palette[i] + ',1)',
+      lineStrokeColor: 'rgba(' + color_palette[i] + ',1)',
       pointColor: 'rgba(' + color_palette[i] + ',1)',
       pointStrokeColor: "#fff",
       pointHighlightFill: "#fff",
       pointHighlightStroke: 'rgba(' + color_palette[i] + ',1)',
+      barFillColor: 'rgba(' + color_palette[i] + ',0.65)',
+      barStrokeColor: 'rgba(' + color_palette[i] + ',0.9)',
+      barHighlightFill: 'rgba(' + color_palette[i] + ',0.8)',
+      barHighlightStroke: 'rgba(' + color_palette[i] + ',1)'
     };
   }
 
@@ -1827,20 +1855,32 @@
 
     render: function () {
       _.each(this.model.datasets, function (dataset) {
-        var line_view = new LineView({
-          collection: dataset
-        });
 
-        this.$el.append(line_view.$el);
-
-        dataset.each(function (point) {
-          var point_view = new PointView({
-            model: point,
+        if (globalOptions.type == 'line') {
+          var line_view = new LineView({
             collection: dataset
           });
 
-          this.$el.append(point_view.$el);
-        }, this);
+          this.$el.append(line_view.$el);
+
+          dataset.each(function (point) {
+            var point_view = new PointView({
+              model: point,
+              collection: dataset
+            });
+
+            this.$el.append(point_view.$el);
+          }, this);
+        } else if (globalOptions.type == 'bar') {
+          dataset.each(function (bar) {
+            var bar_view = new BarView({
+              model: bar,
+              collection: dataset
+            });
+
+            this.$el.append(bar_view.$el);
+          }, this);
+        }
       }, this);
     }
   });
@@ -1867,7 +1907,7 @@
 
       this.$el.attr({
         points: points,
-        stroke: this.collection.color.strokeColor,
+        stroke: this.collection.color.lineStrokeColor,
         fill: 'transparent',
         'stroke-width': globalOptions.line_stroke_width
       });
@@ -1941,6 +1981,83 @@
       this.$el.attr({
         fill: this.model.collection.color.pointHighlightFill,
         stroke: this.model.collection.color.pointHighlightStroke
+      });
+      this.is_highlighted = true;
+    }
+  });
+
+
+  // BarView
+  // -------------------
+
+  // A view extention for rendering points
+
+  var BarView = Disapproval.View.extend({
+    tagName: 'rect',
+
+    initialize: function () {
+      this.chart = this.model.collection.chart;
+      this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(this.chart, 'mousemove', this.checkProximity);
+      this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
+      this.listenTo(this.collection, 'highlight', this.highlight);
+      this.listenTo(this.collection, 'remove_highlight', this.removeHighlight);
+      this.render();
+    },
+
+    render: function () {
+      var width = this.chart.xConversion(this.chart.bounds.x_step) - globalOptions.bar_spacing;
+      var height = this.chart.yConversion(this.model.get('y'));
+      var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x - width / 2;
+      var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
+
+      this.$el.attr({
+        x: x,
+        y: y,
+        width: width,
+        height: height,
+        'stroke-width': globalOptions.bar_stroke_width
+      });
+      this.style();
+    },
+
+    checkProximity: function (event) {
+      // if (this.chart == event.chart) {
+        var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
+        var threshold = (delta_x < 0 ? this.model.get('threshold_left') : this.model.get('threshold_right'));
+        if (Math.abs(delta_x) < Math.abs(threshold)) {
+          if (!this.is_highlighted) {
+            this.highlight();
+            this.chart.tooltipCollection.add(this.model);
+          }
+        } else if (this.is_highlighted) {
+          this.removeHighlight();
+          this.chart.tooltipCollection.remove(this.model);
+        }
+      // }
+    },
+
+    removeHighlightAndTooltip: function () {
+      this.removeHighlight(event);
+      this.chart.tooltipCollection.remove(this.model);
+    },
+
+    removeHighlight: function () {
+      this.style();
+      this.is_highlighted = false;
+    },
+
+    style: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.barFillColor,
+        stroke: this.model.collection.color.barStrokeColor
+      });
+    },
+
+    highlight: function () {
+      this.$el.attr({
+        fill: this.model.collection.color.barHighlightFill,
+        stroke: this.model.collection.color.barHighlightStroke
       });
       this.is_highlighted = true;
     }
@@ -2227,7 +2344,7 @@
         width: 8,
         height: 8,
         'margin-top': 4,
-        'background-color': this.collection.color.strokeColor
+        'background-color': this.collection.color.lineStrokeColor
       }));
 
       this.$legend_text = $('<div>', { class: 'legend-text' }).html(this.collection.name);
