@@ -937,16 +937,9 @@
   // Disapproval.Chart
   // -------------------
 
-  // If models tend to represent a single row of data, a Disapproval Collection is
-  // more analogous to a table full of data ... or a small slice or page of that
-  // table, or a collection of rows that belong together for a particular reason
-  // -- all of the messages in this particular folder, all of the documents
-  // belonging to this particular author, and so on. Collections maintain
-  // indexes of their models, both in order, and for lookup by `id`.
-
-  // Create a new **Collection**, perhaps to contain a specific type of `model`.
-  // If a `comparator` is specified, the Collection will maintain
-  // its models in sort order, as they're added and removed.
+  // Datasets must contian labels with values at the very minimum span the set
+  // of possible x values.  Dataset must be composed of ordered functional
+  // values, meaning that x values must increase with each datum.
 
   var Chart = Disapproval.Chart = function (data, options) {
     all_charts.push(this);
@@ -957,18 +950,32 @@
     this._attachToContainer();
     this._reset();
     this.initialize.apply(this, arguments);
-    this.listenTo(Disapproval, 'window:shrink', this._shrink);
-    this.listenTo(Disapproval, 'window:grow', this._grow);
-    this.listenTo(Disapproval, 'window:set_size', this._setSize);
-    this.listenTo(Disapproval, 'window:calculate_label_dimensions', this._calculateLabelDimensions);
-    this.listenTo(Disapproval, 'window:set_canvas', this._setCanvas);
-    this.listenTo(Disapproval, 'window:calculate_axes', this._calculateAxes);
-    this.listenTo(Disapproval, 'window:set_axes', this._setAxes);
-    this.listenTo(Disapproval, 'window:set_threshold', this._setThreshold);
+    this.listenTo(Disapproval, 'shrink', this._shrink);
+    this.listenTo(Disapproval, 'grow', this._grow);
+    this.listenTo(Disapproval, 'set_size', this._setSize);
+    this.listenTo(Disapproval, 'calculate_label_dimensions', this._calculateLabelDimensions);
+    this.listenTo(Disapproval, 'set_canvas', this._setCanvas);
+    this.listenTo(Disapproval, 'calculate_axes', this._calculateAxes);
+    this.listenTo(Disapproval, 'set_axes', this._setAxes);
+    this.listenTo(Disapproval, 'set_point_thresholds', this._setPointThresholds);
     if (data) this.reset(data, _.extend({ silent: true }, options));
     this.delegateEvents();
     this.renderLegend();
-    this.resize();
+
+    // This is overkill if there are multiple charts. It would be better to only
+    // do this once after all charts have been added.
+    Disapproval.trigger('shrink');
+    Disapproval.trigger('grow');
+    Disapproval.trigger('set_size');
+    Disapproval.trigger('calculate_label_dimensions'); // best guess at size
+    Disapproval.trigger('set_canvas');
+    Disapproval.trigger('calculate_axes');
+    Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
+    Disapproval.trigger('set_canvas');
+    Disapproval.trigger('set_axes');
+    Disapproval.trigger('set_point_thresholds');
+    Disapproval.trigger('render');
+
     this.render();
   };
 
@@ -976,7 +983,6 @@
   var chartOptions = ['container', 'el', 'id', 'attributes', 'className', 'tagName', 'events'];
 
   _.extend(Chart.prototype, View.prototype, {
-    aspectRatio: 16 / 9,
     container: 'body',
 
     events: {
@@ -986,17 +992,14 @@
 
     _triggerMousemove: function (event) {
       var offset = this.$el.offset();
-      Disapproval.trigger('chart:mousemove', {
+      this.trigger('mousemove', {
         x: event.pageX - offset.left,
-        y: event.pageY - offset.top,
-        chart: this
+        y: event.pageY - offset.top
       });
     },
 
     _triggerMouseleave: function (event) {
-      if (!$(event.relatedTarget).hasClass('tooltip')) {
-        Disapproval.trigger('chart:mouseleave', { chart: this });
-      }
+      this.trigger('mouseleave');
     },
 
     _attachToContainer: function () {
@@ -1018,7 +1021,7 @@
     },
 
     _setBounds: function () {
-      // TODO: this could be optimized, especially for fixed x-range
+      // TODO: this could be optimized, especially for equally spaced x data between datasets
       _.each(this.datasets, function (dataset) {
         var x_min = _.min(dataset.pluck('x'));
         var x_max = _.max(dataset.pluck('x'));
@@ -1051,6 +1054,10 @@
 
     _naturalBoundsY: function () {
       var range = this.data_range.y_max - this.data_range.y_min;
+
+      // Determine the steps in divisions of the relevant power of 10.
+      // e.g division of 0 0.25 0.5 0.75 are natural for data bounded by 1
+      // and divisions of 0 2.5 5 7.5 are natural for data bounded by 10
       var step = Math.pow(10, String(Math.floor(range)).length - 1);
       while (range / step < 11) {
         step /= 2;
@@ -1085,6 +1092,11 @@
 
       var upper_bound;
       if (globalOptions.multiple_charts_align_right_point) {
+        // NOTE: This approach only works if the left axes are also aligned
+        // otherwise the right points will be off by 4% of the difference
+        // of the label widths.
+        // TODO: take differences in main canvas size into account so that the
+        // right points will align without the left axes being aligned
         upper_bound = lower_bound + (this.data_range.x_max - lower_bound) * 1.04;
       } else if (label_max.x - step == this.data_range.x_max) {
         upper_bound = this.data_range.x_max + step / 2;
@@ -1119,7 +1131,7 @@
         return (label.x < this.bounds.x_min || label.x > this.bounds.x_max)
       }, this);
       while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
-        if (labels.length <= 2) break;
+        if (labels.length <= 2) break; // break if the label width is wider than the chart
         labels = _.select(labels, function (x, i) { return i % 2 == 0; });
       }
 
@@ -1137,9 +1149,10 @@
         }));
         if (this.canvas.left.label.width < max_left_label_width) this.canvas.left.label.width = max_left_label_width;
         this._setCanvas();
-
       }
       if (globalOptions.multiple_charts_align_right_point) {
+        // TODO: corresponding to the note above, in order to do this more correctly,
+        // the differences in the widths of the main canvas should be taken into account
         var min_total_canvas_width = _.min(_.map(all_charts, function (chart) {
           return chart.canvas.main.width + chart.canvas.left.width;
         }));
@@ -1153,18 +1166,18 @@
       this.x_axis.set(this.x_axis.new_values);
     },
 
-    _setThreshold: function () {
+    _setPointThresholds: function () {
       _.each(this.datasets, function (dataset) {
         dataset.each(function (point, i) {
           if (dataset.models[i + 1]) {
-            var threshold = Math.abs(this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2);
+            var threshold = this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2;
             point.set('threshold_right', threshold);
             if (i == 0) {
-              point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // a good guess
+              point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
             }
             dataset.models[i + 1].set('threshold_left', threshold);
           } else {
-            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // a good guess
+            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
           }
         }, this);
       }, this);
@@ -1176,12 +1189,12 @@
 
     _grow: function () {
       // set best guess at height of container
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
+      this.$chart_container.height(Math.round(this.$chart_container.width() / globalOptions.aspect_ratio));
     },
 
     _setSize: function () {
-      // reset height with possibly updated width from scrollbar being added to screen
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
+      // reset height with updated width from the potential addition of a scrollbar
+      this.$chart_container.height(Math.round(this.$chart_container.width() / globalOptions.aspect_ratio));
       // grab accurate dimensions
       this.width = this.$chart_container.width();
       this.height = this.$chart_container.height();
@@ -1199,8 +1212,8 @@
     _calculateYLabel: function () {
       var label_text;
       if (this.y_axis && this.y_axis.new_values) {
-        // calculate what will be the widest text label
-        // perferring highest value with choose the widest rendered string
+        // calculate the widest text label
+        // perferring highest value will choose the widest rendered string
         // e.g. 1000 is wider than 87.5
         var max_length = 0;
         _.each(this.y_axis.new_values, function (value) {
@@ -1210,14 +1223,14 @@
           }
         });
       } else {
-        label_text = String(this.bounds.y_max);
+        label_text = String(this.bounds.y_max); // TODO: Change from String to the correct function if labels are formatted
       }
 
       // create svg text element and to append it to the DOM in order to get width
       var label = svg$el('text').html(label_text).attr({
         'font-family': globalOptions.axes_font_family,
         'font-size': globalOptions.axes_font_size
-      }); // Change from String to the correct function this if labels are formatted
+      });
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
       $('body').append(temp_svg);
       temp_svg.append(label);
@@ -1308,7 +1321,7 @@
         });
         var dataset_collection = new Disapproval.Collection(points);
         dataset_collection.name = dataset.name;
-        dataset_collection.color = lineChartColoring(i, color_palette);
+        dataset_collection.color = chartColoring(i, color_palette);
         dataset_collection.chart = this;
         return dataset_collection;
       }, this);
@@ -1316,20 +1329,6 @@
       this._setBounds();
       if (!options.silent) this.trigger('reset', this, options);
       return this;
-    },
-
-    resize: function () {
-      Disapproval.trigger('window:shrink');
-      Disapproval.trigger('window:grow');
-      Disapproval.trigger('window:set_size');
-      Disapproval.trigger('window:calculate_label_dimensions'); // best guess at size
-      Disapproval.trigger('window:set_canvas');
-      Disapproval.trigger('window:calculate_axes');
-      Disapproval.trigger('window:calculate_label_dimensions'); // reset after y-axis is known
-      Disapproval.trigger('window:set_canvas');
-      Disapproval.trigger('window:set_axes');
-      Disapproval.trigger('window:set_threshold');
-      Disapproval.trigger('window:render');
     },
 
     xScale: function (x) {
@@ -1429,19 +1428,23 @@
   Model.extend = Collection.extend = View.extend = Chart.extend = extend;
 
   $(window).resize(_.debounce(function () {
-    Disapproval.trigger('window:shrink');
-    Disapproval.trigger('window:grow');
-    Disapproval.trigger('window:set_size');
-    Disapproval.trigger('window:calculate_label_dimensions'); // best guess at size
-    Disapproval.trigger('window:set_canvas');
-    Disapproval.trigger('window:calculate_axes');
-    Disapproval.trigger('window:calculate_label_dimensions'); // reset after y-axis is known
-    Disapproval.trigger('window:set_canvas');
-    Disapproval.trigger('window:set_axes');
-    Disapproval.trigger('window:set_threshold');
-    Disapproval.trigger('window:render');
+    // Do not change this willy-nilly
+    Disapproval.trigger('shrink');
+    Disapproval.trigger('grow');
+    Disapproval.trigger('set_size');
+    Disapproval.trigger('calculate_label_dimensions'); // best guess at size
+    Disapproval.trigger('set_canvas');
+    Disapproval.trigger('calculate_axes');
+    Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
+    Disapproval.trigger('set_canvas');
+    Disapproval.trigger('set_axes');
+    Disapproval.trigger('set_point_thresholds');
+    Disapproval.trigger('render');
   }, 300));
 
+  // Define which tag are svg namespaced
+  // NOTE: this approch isn't general because some of the tag names overlap.
+  // We just happen to not use any overlapping names is this app.
   var svg_tags = [
     'circle',
     'line',
@@ -1487,6 +1490,8 @@
   ];
 
   var globalOptions = {
+    aspect_ratio: 16 / 9,
+
     grid_stroke_color: "rgba(0,0,0,0.06)",
     grid_stroke_width: 1,
     grid_show_lines: true,
@@ -1519,10 +1524,10 @@
     multiple_charts_align_right_point: false
   };
 
-  function lineChartColoring(i, color_palette) {
+  function chartColoring(i, color_palette) {
     i = i % color_palette.length;
     return {
-      fillColor: 'rgba(' + color_palette[i] + ',0.2)',
+      fillColor: 'rgba(' + color_palette[i] + ',0.8)',
       strokeColor: 'rgba(' + color_palette[i] + ',1)',
       pointColor: 'rgba(' + color_palette[i] + ',1)',
       pointStrokeColor: "#fff",
@@ -1535,7 +1540,6 @@
     attributes || (attributes = {});
     return Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
   }
-
 
   // LeftView 
   // -------------------
@@ -1644,7 +1648,7 @@
       var label_margin_right = 10;
       this.$el.attr({
         x: this.model.collection.chart.canvas.left.width - width - label_margin_right,
-        y: position + globalOptions.axes_font_size / 2 - 1 // Don't know why I need a 1 here, maybe lineheight of tick
+        y: position + globalOptions.axes_font_size / 2 - 1 // Don't know why we need a 1 here, maybe lineheight of tick
       });
 
     }
@@ -1850,7 +1854,7 @@
     tagName: 'polyline',
 
     initialize: function () {
-      this.listenTo(Disapproval, 'window:render', this.render);
+      this.listenTo(Disapproval, 'render', this.render);
       this.render();
     },
 
@@ -1880,9 +1884,9 @@
 
     initialize: function () {
       this.chart = this.model.collection.chart;
-      this.listenTo(Disapproval, 'window:render', this.render);
-      this.listenTo(Disapproval, 'chart:mousemove', this.checkProximity);
-      this.listenTo(Disapproval, 'chart:mouseleave', this.removeHighlightAndTooltip);
+      this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(this.chart, 'mousemove', this.checkProximity);
+      this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
       this.listenTo(this.collection, 'highlight', this.highlight);
       this.listenTo(this.collection, 'remove_highlight', this.removeHighlight);
       this.render();
@@ -1901,19 +1905,19 @@
     },
 
     checkProximity: function (event) {
-      if (this.chart == event.chart) {
+      // if (this.chart == event.chart) {
         var delta_x = event.x - this.chart.xScale(this.model.get('x')) - this.chart.canvas.main.offset.x;
         var threshold = (delta_x < 0 ? this.model.get('threshold_left') : this.model.get('threshold_right'));
-        if (Math.abs(delta_x) < threshold) {
+        if (Math.abs(delta_x) < Math.abs(threshold)) {
           if (!this.is_highlighted) {
             this.highlight();
             this.chart.tooltipCollection.add(this.model);
           }
         } else if (this.is_highlighted) {
-          this.removeHighlight(event);
+          this.removeHighlight();
           this.chart.tooltipCollection.remove(this.model);
         }
-      }
+      // }
     },
 
     removeHighlightAndTooltip: function () {
@@ -1952,13 +1956,9 @@
     tagName: 'ul',
     className: 'tooltip list',
 
-    events: {
-      'mousemove': '_triggerMousemove',
-    },
-
     initialize: function () {
-      this.listenTo(this.collection, 'add', this.render);
-      this.listenTo(this.collection, 'remove', this.hideTooltip);
+      this.listenTo(this.collection, 'add', this.renderPoint);
+      this.listenTo(this.collection, 'remove', this.checkTooltip);
       this.$el.css({
         padding: 10,
         margin: 0,
@@ -1966,16 +1966,17 @@
       });
     },
 
-    render: _.debounce(function () {
-      // blow away tooltip html in order to preserve order
-      // TODO: implement smart update
-      this.$el.html('');
-      this.collection.each(function (point) {
-        this.$el.append(new TooltipPointView({ model: point }).$el);
-      }, this);
+    renderPoint: function (point) {
+      var position = this.collection.indexOf(point);
+      var tooltipPointView = new TooltipPointView({ model: point });
 
+      if (position === 0) {
+          this.$el.prepend(tooltipPointView.el);
+      } else {
+          $(this.$('li')[position - 1]).after(tooltipPointView.el);
+      }
       this.setTooltipPosition();
-    }, 100),
+    },
 
     setTooltipPosition: function () {
       if (this.collection.models.length > 0) {
@@ -2015,18 +2016,9 @@
 
     },
 
-    hideTooltip: function () {
-        this.collection.$container.hide();
-    },
-
-    _triggerMousemove: function (event) {
-      var offset = this.collection.chart.$el.offset();
-      Disapproval.trigger('chart:mousemove', {
-        x: event.pageX - offset.left,
-        y: event.pageY - offset.top,
-        chart: this.collection.chart
-      });
-    },
+    checkTooltip: function (model) {
+      if (this.collection.length == 0) this.collection.$container.hide();
+    }
 
   });
 
@@ -2040,7 +2032,7 @@
      className: 'tooltip point',
 
     initialize: function () {
-      this.listenTo(this.model, 'remove', this.remove);
+      this.listenTo(this.model, 'remove', this.remove)
       this.render();
       this.$el.css({
         margin: 0,
@@ -2083,7 +2075,7 @@
   // LegendView
   // -------------------
 
-  // A view extention for rendering the main section of the chart
+  // A view extention for rendering the legend
 
   var LegendView = Disapproval.View.extend({
     tagName: 'ul',
@@ -2095,8 +2087,8 @@
 
     initialize: function () {
       this.is_collapsed = true;
-      this.listenTo(Disapproval, 'window:render', this._applyCss);
-      this.listenTo(Disapproval, 'window:shrink', this._releaseWidth);
+      this.listenTo(Disapproval, 'render', this._applyCss);
+      this.listenTo(Disapproval, 'shrink', this._releaseWidth);
       this.render();
     },
 
@@ -2148,7 +2140,7 @@
 
     _applyCss: function () {
       this._setItemWidth();
-      // for aesthetic reasons, set the width so lengend only resizes along with chart
+      // for aesthetic reasons, set the width so lengend only resizes along with the chart
       this.$el.outerWidth(this.model.width);
 
       if (!this._isOverflowing()) {
