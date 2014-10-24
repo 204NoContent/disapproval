@@ -56,7 +56,12 @@ $(document).ready(function () {
   // }
 
   var single_dataset_data = {
-    labels: [],
+    labels: _.map(_.range(0, 12 + 1), function (i) {
+      return {
+        x: i,
+        label: 'x label: ' + i
+      };
+    }),
     datasets: [{
       name: 'Single Dataset',
       x: _.range(1, 10 + 1),
