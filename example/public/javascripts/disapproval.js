@@ -1,4 +1,4 @@
-//   Disapproval.js 0.0.9
+//   Disapproval.js 0.1.0
 //   (c) 2014 Aaron O'Connell, 42Floors
 // 
 //   with lots of the internals taken from Backbone.js
@@ -36,7 +36,7 @@
   var slice = array.slice;
 
   // Current version of the library. Keep in sync with `package.json`.
-  Disapproval.VERSION = '0.0.9';
+  Disapproval.VERSION = '0.1.0';
 
   // For Disapproval's purposes, jQuery, Zepto, or Ender the `$` variable.
   Disapproval.$ = $;
@@ -959,7 +959,7 @@
     this.listenTo(Disapproval, 'calculate_axes', this._calculateAxes);
     this.listenTo(Disapproval, 'set_axes', this._setAxes);
     this.listenTo(Disapproval, 'set_point_thresholds', this._setPointThresholds);
-    if (data) this.reset(data, _.extend({ silent: true }, options));
+    if (data) this._setup(data, _.extend({ silent: true }, options));
     this.delegateEvents();
     this.renderLegend();
 
@@ -1021,6 +1021,10 @@
     },
 
     _reset: function () {
+      if (this.datasets) _.each(this.datasets, function (dataset) {
+        dataset.set([]); // TODO: fix this hack, see PointView
+        dataset.remove();
+      });
       this.datasets = [];
       this.data_range = { x_min: Infinity, x_max: -Infinity, y_min: Infinity, y_max: -Infinity };
       this.canvas = {
@@ -1028,8 +1032,12 @@
         bottom: { width: 0, height: 0, offset: { x: 0, y: 0 }},
         main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
       };
-      this.tooltipCollection = new Disapproval.Collection([], { comparator: function (model) { return -model.get('y'); } });
-      this.tooltipCollection.chart = this;
+      if (this.tooltipCollection) {
+        this.tooltipCollection.set([]); // it's important to remove any stray tooltip items
+      } else {
+        this.tooltipCollection = new Disapproval.Collection([], { comparator: function (model) { return -model.get('y'); } });
+        this.tooltipCollection.chart = this;
+      }
     },
 
     _setBounds: function () {
@@ -1071,8 +1079,10 @@
       // e.g division of 0 0.25 0.5 0.75 are natural for data bounded by 1
       // and divisions of 0 2.5 5 7.5 are natural for data bounded by 10
       var step = Math.pow(10, String(Math.floor(range)).length - 1);
-      while (range / step < 11) {
-        step /= 2;
+      if (range > 0) {
+        while (range / step < 11) {
+          step /= 2;
+        }
       }
       var lower_bound;
       if (this.data_range.y_min >= 0 && this.data_range.y_min < step) {
@@ -1088,24 +1098,38 @@
     _naturalBoundsX: function () {
       var lower_bound;
       var upper_bound;
+      var total_steps;
       var step;
+      var chart_padding;
 
       if (this.type == 'bar') {
         lower_bound = this.data_range.x_min
         upper_bound = this.data_range.x_max
-        step = (upper_bound - lower_bound) / ( this.datasets[0].length - 1);
-        var chart_padding = step * 3 / 4;
+        total_steps = this.datasets[0].length - 1;
+        if (total_steps == 0) {
+          step = 1;
+        } else {
+          step = (upper_bound - lower_bound) / (total_steps);
+        }
+        chart_padding = step * 3 / 4;
         return { min: lower_bound - chart_padding, max: upper_bound + chart_padding, step: step };
       }
 
-      var label_min = _.max(_.filter(this.labels, function (label) { return label.x < this.data_range.x_min; }, this), function (label) { return label.x });
-      var label_max = _.min(_.filter(this.labels, function (label) { return label.x > this.data_range.x_max; }, this), function (label) { return label.x });
+      var label_min = _.max(_.filter(this.labels, function (label) { return label.x <= this.data_range.x_min; }, this), function (label) { return label.x });
+      var label_max = _.min(_.filter(this.labels, function (label) { return label.x >= this.data_range.x_max; }, this), function (label) { return label.x });
 
       var labels = _.reject(this.labels, function (label) {
         return (label.x < label_min.x || label.x > label_max.x);
       });
 
-      step = (label_max.x - label_min.x) / ( labels.length - 1)
+      total_steps = labels.length - 1;
+      if (total_steps == 0) {
+        step = 1;
+        chart_padding = step * 3 / 4;
+        return { min: label_min.x - chart_padding, max: label_max.x + chart_padding, step: step };
+      } else {
+        step = (label_max.x - label_min.x) / (total_steps)
+      }
 
       if (this.data_range.x_min >= 0 && this.data_range.x_min < step) {
         lower_bound = 0;
@@ -1198,6 +1222,9 @@
               point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
             }
             dataset.models[i + 1].set('threshold_left', threshold);
+          } else if (dataset.length == 1) {
+            point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
+            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
           } else {
             point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
           }
@@ -1329,6 +1356,35 @@
 
     // public methods
     reset: function (data, options) {
+      this._setup(data, options);
+
+      if (this.datasets.length == 1) {
+        this.legendView.$el.hide();
+      } else {
+        this.legendView.$el.show();
+      }
+
+      this.trigger('render_legend');
+
+      Disapproval.trigger('shrink');
+      Disapproval.trigger('grow');
+      Disapproval.trigger('set_size');
+      Disapproval.trigger('calculate_label_dimensions'); // best guess at size
+      Disapproval.trigger('set_canvas');
+      Disapproval.trigger('calculate_axes');
+      Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
+      Disapproval.trigger('set_canvas');
+      Disapproval.trigger('set_axes');
+      Disapproval.trigger('set_point_thresholds');
+      Disapproval.trigger('render');
+
+      this.trigger('render')
+
+      return this;
+    },
+
+    // public methods
+    _setup: function (data, options) {
       options || (options = {});
       this._reset();
       this.labels = data.labels;
@@ -1347,11 +1403,16 @@
         dataset_collection.chart = this;
         return dataset_collection;
       }, this);
+      if (this.cached_type == 'bar') this.type = 'bar';
+      if (this.cached_y_axis_lower_bound_zero == false) this.y_axis_lower_bound_zero = false;
       if (this.type == 'bar') {
         if (this.datasets.length > 1) {
           // bar charts are for one dataset only
+          this.cached_type = 'bar';
           this.type = 'line';
         } else {
+          // bar charts should begin at y = 0
+          this.cached_y_axis_lower_bound_zero = this.y_axis_lower_bound_zero;
           this.y_axis_lower_bound_zero = true;
         }
       }
@@ -1387,11 +1448,10 @@
     // },
 
     renderLegend: function () {
-      if (this.datasets.length > 1) {
-        var legend_view = new LegendView({ model: this });
-        this.$container.append(legend_view.$el);
-        legend_view._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
-      }
+      this.legendView = new LegendView({ model: this });
+      if (this.datasets.length == 1) this.legendView.$el.hide();
+      this.$container.append(this.legendView.$el);
+      this.legendView._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
     },
 
     render: function () {
@@ -1433,7 +1493,7 @@
     line_stroke_width: 2,
 
     bar_stroke_width: 2,
-    bar_spacing: 10,
+    bar_spacing: 0.1,
 
     tooltip_offset: 10,
     tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
@@ -1872,6 +1932,7 @@
 
     initialize: function () {
       this.render();
+      this.listenTo(this.model, 'render', this.render)
     },
 
     render: function () {
@@ -1917,6 +1978,7 @@
     initialize: function () {
       this.chart = this.collection.chart;
       this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(this.collection, 'remove', this.remove);
       this.render();
     },
 
@@ -1945,12 +2007,18 @@
     tagName: 'circle',
 
     initialize: function () {
-      this.chart = this.model.collection.chart;
+      this.chart = this.collection.chart;
       this.listenTo(Disapproval, 'render', this.render);
       this.listenTo(this.chart, 'mousemove', this.checkProximity);
       this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
       this.listenTo(this.collection, 'highlight', this.highlight);
       this.listenTo(this.collection, 'remove_highlight', this.removeHighlight);
+
+      // TODO: This needs to be cleaned up.  The model belongs to the dataset collection
+      // and to the tooltip collection at times, so listening to the model remove event will
+      // cause this view to be removed when the model is removed from the tooltip collection.
+      // Listening to the dataset collection event is a hack that needs fixing.
+      this.listenTo(this.collection, 'remove', this.remove);
       this.render();
     },
 
@@ -1992,15 +2060,15 @@
 
     style: function () {
       this.$el.attr({
-        fill: this.model.collection.color.pointColor,
-        stroke: this.model.collection.color.pointStrokeColor
+        fill: this.collection.color.pointColor,
+        stroke: this.collection.color.pointStrokeColor
       });
     },
 
     highlight: function () {
       this.$el.attr({
-        fill: this.model.collection.color.pointHighlightFill,
-        stroke: this.model.collection.color.pointHighlightStroke
+        fill: this.collection.color.pointHighlightFill,
+        stroke: this.collection.color.pointHighlightStroke
       });
       this.is_highlighted = true;
     }
@@ -2010,26 +2078,35 @@
   // BarView
   // -------------------
 
-  // A view extention for rendering points
+  // A view extention for rendering bars
 
   var BarView = Disapproval.View.extend({
     tagName: 'rect',
 
     initialize: function () {
-      this.chart = this.model.collection.chart;
+      this.chart = this.collection.chart;
       this.listenTo(Disapproval, 'render', this.render);
       this.listenTo(this.chart, 'mousemove', this.checkProximity);
       this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
       this.listenTo(this.collection, 'highlight', this.highlight);
       this.listenTo(this.collection, 'remove_highlight', this.removeHighlight);
+
+      // TODO: clean this up, see PointView
+      this.listenTo(this.collection, 'remove', this.remove);
       this.render();
     },
 
     render: function () {
-      var width = this.chart.xConversion(this.chart.bounds.x_step) - this.chart.bar_spacing;
+      var width = this.chart.xConversion(this.chart.bounds.x_step) * (1 - this.chart.bar_spacing) - this.chart.bar_stroke_width;
       var height = this.chart.yConversion(this.model.get('y'));
       var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x - width / 2;
       var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
+
+      // pad bars of zero height so they display
+      if (height == 0) {
+        height = 1;
+        y -= 1;
+      }
 
       this.$el.attr({
         x: x,
@@ -2068,15 +2145,15 @@
 
     style: function () {
       this.$el.attr({
-        fill: this.model.collection.color.barFillColor,
-        stroke: this.model.collection.color.barStrokeColor
+        fill: this.collection.color.barFillColor,
+        stroke: this.collection.color.barStrokeColor
       });
     },
 
     highlight: function () {
       this.$el.attr({
-        fill: this.model.collection.color.barHighlightFill,
-        stroke: this.model.collection.color.barHighlightStroke
+        fill: this.collection.color.barHighlightFill,
+        stroke: this.collection.color.barHighlightStroke
       });
       this.is_highlighted = true;
     }
@@ -2094,7 +2171,7 @@
 
     initialize: function () {
       this.chart = this.collection.chart;
-      this.listenTo(this.collection, 'add', this.renderPoint);
+      this.listenTo(this.collection, 'add', this.renderTootltipItem);
       this.listenTo(this.collection, 'remove', this.checkTooltip);
       this.$el.css({
         padding: 10,
@@ -2103,11 +2180,11 @@
       });
     },
 
-    renderPoint: function (point) {
-      var position = this.collection.indexOf(point);
-      var tooltipPointView = new TooltipPointView({ model: point });
+    renderTootltipItem: function (item) {
+      var position = this.collection.indexOf(item);
+      var tooltipPointView = new TooltipItemView({ model: item });
 
-      if (position === 0) {
+      if (position == 0) {
           this.$el.prepend(tooltipPointView.el);
       } else {
           $(this.$('li')[position - 1]).after(tooltipPointView.el);
@@ -2118,8 +2195,8 @@
 
     setTooltipPosition: _.debounce(function () {
       if (this.collection.models.length > 0) {
-        var x_min = this.chart.xScale(_.min(this.collection.map(function (point) { return point.get('x'); })));
-        var x_max = this.chart.xScale(_.max(this.collection.map(function (point) { return point.get('x'); })));
+        var x_min = this.chart.xScale(_.min(this.collection.map(function (item) { return item.get('x'); })));
+        var x_max = this.chart.xScale(_.max(this.collection.map(function (item) { return item.get('x'); })));
 
         if (x_min > this.chart.canvas.main.width / 2) {
           this.collection.side = 'left';
@@ -2160,14 +2237,14 @@
 
   });
 
-  // TooltipPointView
+  // TooltipItemView
   // -------------------
 
-  // A view extention for rendering tooltip models
+  // A view extention for rendering tooltip items
 
-  var TooltipPointView = Disapproval.View.extend({
+  var TooltipItemView = Disapproval.View.extend({
      tagName: 'li',
-     className: 'tooltip point',
+     className: 'tooltip item',
 
     initialize: function () {
       this.chart = this.model.collection.chart;
@@ -2180,33 +2257,34 @@
     },
 
     render: function () {
-      this.$el.append($('<div>', { class: 'tooltip point-color' }).css({
+      this.$el.append($('<div>', { class: 'tooltip item-color' }).css({
         position: 'absolute',
         width: 8,
         height: 8,
         'margin-top': 4,
-        'background-color': this.model.collection.color.pointColor
+        'background-color': this.model.collection.color.lineStrokeColor
       }));
 
-      var tooltip_point = $('<div>', { class: 'tooltip point-text' });
+      var tooltip_item = $('<div>', { class: 'tooltip item-text' });
       var text = this.model.get('y');
       if (this.model.get('meta')) {
         text = this.model.get('meta') + ': ' + text;
       }
 
-      tooltip_point.html(text);
+      tooltip_item.html(text);
 
-      tooltip_point.css({
+      tooltip_item.css({
         'margin-left': 20,
         'color': this.chart.tooltip_font_color,
         'font-family': this.chart.tooltip_font_family,
         'font-size': this.chart.tooltip_font_size,
         'font-weight': this.chart.tooltip_font_weight,
         'letter-spacing': this.chart.tooltip_letter_spacing,
+        'word-wrap': 'break-word',
         'cursor': 'default'
-      })
+      });
 
-      this.$el.append(tooltip_point)
+      this.$el.append(tooltip_item);
     }
 
   });
@@ -2228,12 +2306,12 @@
       this.is_collapsed = true;
       this.listenTo(Disapproval, 'render', this._applyCss);
       this.listenTo(Disapproval, 'shrink', this._releaseWidth);
+      this.listenTo(this.model, 'render_legend', this.render);
+      this._createToggleIcon();
       this.render();
     },
 
     render: function () {
-      this._createToggleIcon();
-
       // temp ul to contain items in order to figure out max width
       var $temp_div = $('<div>').css({
         visibility: 'hidden',
@@ -2358,6 +2436,7 @@
 
     initialize: function () {
       this.chart = this.collection.chart;
+      this.listenTo(this.collection, 'remove', this.remove);
       this.render();
     },
 
@@ -2401,8 +2480,3 @@
   return Disapproval;
 
 }));
-
-
-
-
-
