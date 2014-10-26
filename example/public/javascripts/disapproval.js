@@ -9,12 +9,12 @@
 
 (function (root, factory) {
 
-  // Set up Disapproval appropriately for the environment. Start with AMD.
+  // Set up O_o appropriately for the environment. Start with AMD.
   if (typeof define === 'function' && define.amd) {
     define(['underscore', 'jquery', 'exports'], function (_, $, exports) {
       // Export global even in AMD case in case this script is loaded with
-      // others that may still expect a global Disapproval.
-      root.Disapproval = factory(root, exports, _, $);
+      // others that may still expect a global O_o.
+      root.O_o = factory(root, exports, _, $);
     });
 
   // Next for Node.js or CommonJS. jQuery may not be needed as a module.
@@ -24,31 +24,31 @@
 
   // Finally, as a browser global.
   } else {
-    root.Disapproval = factory(root, {}, root._, (root.jQuery || root.Zepto || root.ender || root.$));
+    root.O_o = factory(root, {}, root._, (root.jQuery || root.Zepto || root.ender || root.$));
   }
 
-}(this, function (root, Disapproval, _, $) {
+}(this, function (root, O_o, _, $) {
 
-  var previousDisapproval = root.Disapproval;
+  var previousO_o = root.O_o;
 
   // Create local references to array methods we'll want to use later.
   var array = [];
   var slice = array.slice;
 
   // Current version of the library. Keep in sync with `package.json`.
-  Disapproval.VERSION = '0.1.0';
+  O_o.VERSION = '0.1.0';
 
-  // For Disapproval's purposes, jQuery, Zepto, or Ender the `$` variable.
-  Disapproval.$ = $;
+  // For O_o's purposes, jQuery, Zepto, or Ender owns the `$` variable.
+  O_o.$ = $;
 
-  // Runs Disapproval.js in *noConflict* mode, returning the `Disapproval` variable
-  // to its previous owner. Returns a reference to this Disapproval object.
-  Disapproval.noConflict = function () {
-    root.Disapproval = previousDisapproval;
+  // Runs O_o.js in *noConflict* mode, returning the `O_o` variable
+  // to its previous owner. Returns a reference to this O_o object.
+  O_o.noConflict = function () {
+    root.O_o = previousO_o;
     return this;
   };
 
-  var Events = Disapproval.Events = {
+  var Events = O_o.Events = {
 
     // Bind an event to a `callback` function. Passing `"all"` will bind
     // the callback to all events fired.
@@ -188,7 +188,7 @@
 
   // A difficult-to-believe, but optimized internal dispatch function for
   // triggering events. Tries to keep the usual cases speedy (most internal
-  // Disapproval events have 3 arguments).
+  // O_o events have 3 arguments).
   var triggerEvents = function (events, args) {
     var ev, i = -1, l = events.length, a1 = args[0], a2 = args[1], a3 = args[2];
     switch (args.length) {
@@ -216,22 +216,22 @@
     };
   });
 
-  // Allow the `Disapproval` object to serve as a global event bus, for folks who
+  // Allow the `O_o` object to serve as a global event bus, for folks who
   // want global "pubsub" in a convenient place.
-  _.extend(Disapproval, Events);
+  _.extend(O_o, Events);
 
 
-  // Disapproval.Model
+  // O_o.Model
   // --------------
 
-  // Disapproval **Models** are the basic data object in the framework --
+  // O_o **Models** are the basic data object in the framework --
   // frequently representing a row in a table in a database on your server.
   // A discrete chunk of data and a bunch of useful, related methods for
   // performing computations and transformations on that data.
 
   // Create a new model with the specified attributes. A client id (`cid`)
   // is automatically generated and assigned for you.
-  var Model = Disapproval.Model = function (attributes, options) {
+  var Model = O_o.Model = function (attributes, options) {
     var attrs = attributes || {};
     options || (options = {});
     this.cid = _.uniqueId('c');
@@ -421,10 +421,10 @@
   });
 
 
-  // Disapproval.Collection
+  // O_o.Collection
   // -------------------
 
-  // If models tend to represent a single row of data, a Disapproval Collection is
+  // If models tend to represent a single row of data, a O_o Collection is
   // more analogous to a table full of data ... or a small slice or page of that
   // table, or a collection of rows that belong together for a particular reason
   // -- all of the messages in this particular folder, all of the documents
@@ -434,7 +434,7 @@
   // Create a new **Collection**, perhaps to contain a specific type of `model`.
   // If a `comparator` is specified, the Collection will maintain
   // its models in sort order, as they're added and removed.
-  var Collection = Disapproval.Collection = function (models, options) {
+  var Collection = O_o.Collection = function (models, options) {
     options || (options = {});
     if (options.model) this.model = options.model;
     if (options.comparator !== void 0) this.comparator = options.comparator;
@@ -458,7 +458,7 @@
       this._byId  = {};
     },
 
-    // The default model for a collection is just a **Disapproval.Model**.
+    // The default model for a collection is just a **O_o.Model**.
     // This should be overridden in most cases.
     model: Model,
 
@@ -762,7 +762,7 @@
   });
 
   // Underscore methods that we want to implement on the Collection.
-  // 90% of the core usefulness of Disapproval Collections is actually implemented
+  // 90% of the core usefulness of O_o Collections is actually implemented
   // right here:
   var methods = ['forEach', 'each', 'map', 'collect', 'reduce', 'foldl',
     'inject', 'reduceRight', 'foldr', 'find', 'detect', 'filter', 'select',
@@ -795,10 +795,10 @@
     };
   });
 
-  // Disapproval.View
+  // O_o.View
   // -------------
 
-  // Disapproval Views are almost more convention than they are actual code. A View
+  // O_o Views are almost more convention than they are actual code. A View
   // is simply a JavaScript object that represents a logical chunk of UI in the
   // DOM. This might be a single item, an entire list, a sidebar or panel, or
   // even the surrounding frame which wraps your whole app. Defining a chunk of
@@ -806,9 +806,9 @@
   // having to worry about render order ... and makes it easy for the view to
   // react to specific changes in the state of your models.
 
-  // Creating a Disapproval.View creates its initial element outside of the DOM,
+  // Creating a O_o.View creates its initial element outside of the DOM,
   // if an existing element is not provided...
-  var View = Disapproval.View = function(options) {
+  var View = O_o.View = function(options) {
     this.cid = _.uniqueId('view');
     options || (options = {});
     _.extend(this, _.pick(options, viewOptions));
@@ -823,7 +823,7 @@
   // List of view options to be merged as properties.
   var viewOptions = ['model', 'collection', 'el', 'id', 'attributes', 'className', 'tagName', 'events'];
 
-  // Set up all inheritable **Disapproval.View** properties and methods.
+  // Set up all inheritable **O_o.View** properties and methods.
   _.extend(View.prototype, Events, {
 
     // The default `tagName` of a View's element is `"svg"`.
@@ -847,7 +847,7 @@
     },
 
     // Remove this view by taking the element out of the DOM, and removing any
-    // applicable Disapproval.Events listeners.
+    // applicable O_o.Events listeners.
     remove: function() {
       this.$el.remove();
       this.stopListening();
@@ -858,7 +858,7 @@
     // re-delegation.
     setElement: function(element, delegate) {
       if (this.$el) this.undelegateEvents();
-      this.$el = element instanceof Disapproval.$ ? element : Disapproval.$(element);
+      this.$el = element instanceof O_o.$ ? element : O_o.$(element);
       this.el = this.$el[0];
       if (delegate !== false) this.delegateEvents();
       return this;
@@ -902,7 +902,7 @@
 
     // Clears all callbacks previously bound to the view with `delegateEvents`.
     // You usually don't need to use this, but may wish to if you have multiple
-    // Disapproval views attached to the same DOM element.
+    // O_o views attached to the same DOM element.
     undelegateEvents: function() {
       this.$el.off('.delegateEvents' + this.cid);
       return this;
@@ -919,9 +919,9 @@
         if (this.className) attrs['class'] = _.result(this, 'className');
         var $el;
         if (_.include(svg_tags, _.result(this, 'tagName'))) {
-          $el = Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', _.result(this, 'tagName'))).attr(attrs);
+          $el = O_o.$(document.createElementNS('http://www.w3.org/2000/svg', _.result(this, 'tagName'))).attr(attrs);
         } else {
-          $el = Disapproval.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
+          $el = O_o.$('<' + _.result(this, 'tagName') + '>').attr(attrs);
         }
         this.setElement($el, false);
       } else {
@@ -934,14 +934,14 @@
   // Store a collection of all charts created
   var all_charts = [];
 
-  // Disapproval.Chart
+  // O_o.Chart
   // -------------------
 
   // Datasets must contian labels with values at the very minimum span the set
   // of possible x values.  Dataset must be composed of ordered functional
   // values, meaning that x values must increase with each datum.
 
-  var Chart = Disapproval.Chart = function (data, options) {
+  var Chart = O_o.Chart = function (data, options) {
     all_charts.push(this);
     this.cid = _.uniqueId('view');
     options || (options = {});
@@ -951,31 +951,31 @@
     this._attachToContainer();
     this._reset();
     this.initialize.apply(this, arguments);
-    this.listenTo(Disapproval, 'shrink', this._shrink);
-    this.listenTo(Disapproval, 'grow', this._grow);
-    this.listenTo(Disapproval, 'set_size', this._setSize);
-    this.listenTo(Disapproval, 'calculate_label_dimensions', this._calculateLabelDimensions);
-    this.listenTo(Disapproval, 'set_canvas', this._setCanvas);
-    this.listenTo(Disapproval, 'calculate_axes', this._calculateAxes);
-    this.listenTo(Disapproval, 'set_axes', this._setAxes);
-    this.listenTo(Disapproval, 'set_point_thresholds', this._setPointThresholds);
+    this.listenTo(O_o, 'shrink', this._shrink);
+    this.listenTo(O_o, 'grow', this._grow);
+    this.listenTo(O_o, 'set_size', this._setSize);
+    this.listenTo(O_o, 'calculate_label_dimensions', this._calculateLabelDimensions);
+    this.listenTo(O_o, 'set_canvas', this._setCanvas);
+    this.listenTo(O_o, 'calculate_axes', this._calculateAxes);
+    this.listenTo(O_o, 'set_axes', this._setAxes);
+    this.listenTo(O_o, 'set_point_thresholds', this._setPointThresholds);
     if (data) this._setup(data, _.extend({ silent: true }, options));
     this.delegateEvents();
     this.renderLegend();
 
     // This is overkill if there are multiple charts. It would be better to only
     // do this once after all charts have been added.
-    Disapproval.trigger('shrink');
-    Disapproval.trigger('grow');
-    Disapproval.trigger('set_size');
-    Disapproval.trigger('calculate_label_dimensions'); // best guess at size
-    Disapproval.trigger('set_canvas');
-    Disapproval.trigger('calculate_axes');
-    Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
-    Disapproval.trigger('set_canvas');
-    Disapproval.trigger('set_axes');
-    Disapproval.trigger('set_point_thresholds');
-    Disapproval.trigger('render');
+    O_o.trigger('shrink');
+    O_o.trigger('grow');
+    O_o.trigger('set_size');
+    O_o.trigger('calculate_label_dimensions'); // best guess at size
+    O_o.trigger('set_canvas');
+    O_o.trigger('calculate_axes');
+    O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+    O_o.trigger('set_canvas');
+    O_o.trigger('set_axes');
+    O_o.trigger('set_point_thresholds');
+    O_o.trigger('render');
 
     this.render();
   };
@@ -1035,7 +1035,7 @@
       if (this.tooltipCollection) {
         this.tooltipCollection.set([]); // it's important to remove any stray tooltip items
       } else {
-        this.tooltipCollection = new Disapproval.Collection([], { comparator: function (model) { return -model.get('y'); } });
+        this.tooltipCollection = new O_o.Collection([], { comparator: function (model) { return -model.get('y'); } });
         this.tooltipCollection.chart = this;
       }
     },
@@ -1167,12 +1167,18 @@
         };
       }, this);
       if (!this.y_axis) {
-        this.y_axis = new Disapproval.Collection();
+        this.y_axis = new O_o.Collection();
         this.y_axis.chart = this;
       }
       this.y_axis.new_values = y_values;
 
       // x-axis
+      if (this.type == 'bar' && this.labels.length == 0) {
+        this.labels = _.map(_.range(this.data_range.x_min, this.data_range.x_max + this.bounds.x_step, this.bounds.x_step), function (x) {
+          return { x: x, label: '' }
+        });
+      }
+
       var labels = _.reject(this.labels, function (label) {
         return (label.x < this.bounds.x_min || label.x > this.bounds.x_max)
       }, this);
@@ -1182,7 +1188,7 @@
       }
 
       if (!this.x_axis) {
-        this.x_axis = new Disapproval.Collection();
+        this.x_axis = new O_o.Collection();
         this.x_axis.chart = this;
       }
       this.x_axis.new_values = labels;
@@ -1351,7 +1357,7 @@
     // also remove this from the collection of all charts when a chart is removed
     remove: function () {
       all_charts = _.without(all_charts, this);
-      Disapproval.View.prototype.remove.call(this);
+      O_o.View.prototype.remove.call(this);
     },
 
     // public methods
@@ -1366,17 +1372,17 @@
 
       this.trigger('render_legend');
 
-      Disapproval.trigger('shrink');
-      Disapproval.trigger('grow');
-      Disapproval.trigger('set_size');
-      Disapproval.trigger('calculate_label_dimensions'); // best guess at size
-      Disapproval.trigger('set_canvas');
-      Disapproval.trigger('calculate_axes');
-      Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
-      Disapproval.trigger('set_canvas');
-      Disapproval.trigger('set_axes');
-      Disapproval.trigger('set_point_thresholds');
-      Disapproval.trigger('render');
+      O_o.trigger('shrink');
+      O_o.trigger('grow');
+      O_o.trigger('set_size');
+      O_o.trigger('calculate_label_dimensions'); // best guess at size
+      O_o.trigger('set_canvas');
+      O_o.trigger('calculate_axes');
+      O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+      O_o.trigger('set_canvas');
+      O_o.trigger('set_axes');
+      O_o.trigger('set_point_thresholds');
+      O_o.trigger('render');
 
       this.trigger('render')
 
@@ -1397,7 +1403,7 @@
             meta: dataset.meta[j]
           };
         });
-        var dataset_collection = new Disapproval.Collection(points);
+        var dataset_collection = new O_o.Collection(points);
         dataset_collection.name = dataset.name;
         dataset_collection.color = chartColoring(i, color_palette);
         dataset_collection.chart = this;
@@ -1556,17 +1562,17 @@
 
   $(window).resize(_.debounce(function () {
     // Do not change this willy-nilly
-    Disapproval.trigger('shrink');
-    Disapproval.trigger('grow');
-    Disapproval.trigger('set_size');
-    Disapproval.trigger('calculate_label_dimensions'); // best guess at size
-    Disapproval.trigger('set_canvas');
-    Disapproval.trigger('calculate_axes');
-    Disapproval.trigger('calculate_label_dimensions'); // reset after y-axis is known
-    Disapproval.trigger('set_canvas');
-    Disapproval.trigger('set_axes');
-    Disapproval.trigger('set_point_thresholds');
-    Disapproval.trigger('render');
+    O_o.trigger('shrink');
+    O_o.trigger('grow');
+    O_o.trigger('set_size');
+    O_o.trigger('calculate_label_dimensions'); // best guess at size
+    O_o.trigger('set_canvas');
+    O_o.trigger('calculate_axes');
+    O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+    O_o.trigger('set_canvas');
+    O_o.trigger('set_axes');
+    O_o.trigger('set_point_thresholds');
+    O_o.trigger('render');
   }, 300));
 
   // Define which tag are svg namespaced
@@ -1639,7 +1645,7 @@
 
   function svg$el(tag_name, attributes) {
     attributes || (attributes = {});
-    return Disapproval.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
+    return O_o.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
   }
 
   // LeftView 
@@ -1647,7 +1653,7 @@
 
   // A view extention for rendering the y-axis and labels
 
-  var LeftView = Disapproval.View.extend({
+  var LeftView = O_o.View.extend({
     className: 'canvas-left',
 
     initialize: function () {
@@ -1677,7 +1683,7 @@
     }
   });
 
-  var YLineView = Disapproval.View.extend({
+  var YLineView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1700,7 +1706,7 @@
   });
 
 
-  var YTickView = Disapproval.View.extend({
+  var YTickView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1724,7 +1730,7 @@
     }
   });
 
-  var YLabelView = Disapproval.View.extend({
+  var YLabelView = O_o.View.extend({
     tagName: 'text',
 
     initialize: function () {
@@ -1758,7 +1764,7 @@
     }
   });
 
-  var YGridView = Disapproval.View.extend({
+  var YGridView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1781,7 +1787,7 @@
     }
   });
 
-  var BottomView = Disapproval.View.extend({
+  var BottomView = O_o.View.extend({
     className: 'canvas-bottom',
 
     initialize: function () {
@@ -1797,7 +1803,9 @@
     },
 
     renderXTick: function (model) {
-      this.$el.append(new XTickView({ model: model }).$el);
+      if (this.model.type != 'bar') {
+        this.$el.append(new XTickView({ model: model }).$el);
+      }
       this.$el.append(new XLabelView({ model: model }).$el);
       if (this.model.grid_show_lines) {
         if (model.get('x') != this.model.bounds.x_min) {
@@ -1808,7 +1816,7 @@
 
   });
 
-  var XLineView = Disapproval.View.extend({
+  var XLineView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1830,7 +1838,7 @@
     }
   });
 
-  var XTickView = Disapproval.View.extend({
+  var XTickView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1854,7 +1862,7 @@
     }
   });
 
-  var XLabelView = Disapproval.View.extend({
+  var XLabelView = O_o.View.extend({
     tagName: 'text',
 
     initialize: function () {
@@ -1898,7 +1906,7 @@
     }
   });
 
-  var XGridView = Disapproval.View.extend({
+  var XGridView = O_o.View.extend({
     tagName: 'line',
 
     initialize: function () {
@@ -1927,7 +1935,7 @@
 
   // A view extention for rendering the main section of the chart
 
-  var MainView = Disapproval.View.extend({
+  var MainView = O_o.View.extend({
     className: 'canvas-main',
 
     initialize: function () {
@@ -1972,12 +1980,12 @@
 
   // A view extention for rendering polylines
 
-  var LineView = Disapproval.View.extend({
+  var LineView = O_o.View.extend({
     tagName: 'polyline',
 
     initialize: function () {
       this.chart = this.collection.chart;
-      this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(O_o, 'render', this.render);
       this.listenTo(this.collection, 'remove', this.remove);
       this.render();
     },
@@ -2003,12 +2011,12 @@
 
   // A view extention for rendering points
 
-  var PointView = Disapproval.View.extend({
+  var PointView = O_o.View.extend({
     tagName: 'circle',
 
     initialize: function () {
       this.chart = this.collection.chart;
-      this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(O_o, 'render', this.render);
       this.listenTo(this.chart, 'mousemove', this.checkProximity);
       this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
       this.listenTo(this.collection, 'highlight', this.highlight);
@@ -2080,12 +2088,12 @@
 
   // A view extention for rendering bars
 
-  var BarView = Disapproval.View.extend({
+  var BarView = O_o.View.extend({
     tagName: 'rect',
 
     initialize: function () {
       this.chart = this.collection.chart;
-      this.listenTo(Disapproval, 'render', this.render);
+      this.listenTo(O_o, 'render', this.render);
       this.listenTo(this.chart, 'mousemove', this.checkProximity);
       this.listenTo(this.chart, 'mouseleave', this.removeHighlightAndTooltip);
       this.listenTo(this.collection, 'highlight', this.highlight);
@@ -2165,7 +2173,7 @@
 
   // A view extention for rendering tooltips
 
-  var TooltipView = Disapproval.View.extend({
+  var TooltipView = O_o.View.extend({
     tagName: 'ul',
     className: 'tooltip list',
 
@@ -2242,7 +2250,7 @@
 
   // A view extention for rendering tooltip items
 
-  var TooltipItemView = Disapproval.View.extend({
+  var TooltipItemView = O_o.View.extend({
      tagName: 'li',
      className: 'tooltip item',
 
@@ -2294,7 +2302,7 @@
 
   // A view extention for rendering the legend
 
-  var LegendView = Disapproval.View.extend({
+  var LegendView = O_o.View.extend({
     tagName: 'ul',
     className: 'legend',
 
@@ -2304,8 +2312,8 @@
 
     initialize: function () {
       this.is_collapsed = true;
-      this.listenTo(Disapproval, 'render', this._applyCss);
-      this.listenTo(Disapproval, 'shrink', this._releaseWidth);
+      this.listenTo(O_o, 'render', this._applyCss);
+      this.listenTo(O_o, 'shrink', this._releaseWidth);
       this.listenTo(this.model, 'render_legend', this.render);
       this._createToggleIcon();
       this.render();
@@ -2426,7 +2434,7 @@
 
   // A view extention for rendering legend items
 
-  var LegendItemView = Disapproval.View.extend({
+  var LegendItemView = O_o.View.extend({
     tagName: 'li',
 
     events: {
@@ -2477,6 +2485,6 @@
   });
 
 
-  return Disapproval;
+  return O_o;
 
 }));
