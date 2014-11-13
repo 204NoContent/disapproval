@@ -72,7 +72,7 @@ $(document).ready(function () {
 
   $('<div>', { id: 'chart-container' }).css('margin-bottom', 40).appendTo('body');
   // make a new chart
-  var chart = new Disapproval.Chart(single_dataset_data, { container: '#chart-container' });
+  var chart = new O_o.Chart(single_dataset_data, { container: '#chart-container' });
 
   var data2 = {
     labels: _.map(_.range(-1, 32), function (i) {
@@ -105,5 +105,5 @@ $(document).ready(function () {
   };
 
   $('<div>', { id: 'chart-container-2' }).css('margin-bottom', 40).appendTo('body');
-  var chart2 = new Disapproval.Chart(data2, { container: '#chart-container-2' });
+  var chart2 = new O_o.Chart(data2, { container: '#chart-container-2' });
 });
