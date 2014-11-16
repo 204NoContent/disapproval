@@ -13,7 +13,7 @@ $(document).ready(function () {
   //         name: 'Dataset ' + i,
   //         x: _.range(0, 10 + 1),
   //         y: _.map(_.range(0, 10 + 1), function () { return 0; }),
-  //         meta: _.map(_.range(0, 10 + 1), function () {
+  //         tooltip: _.map(_.range(0, 10 + 1), function () {
   //           return 'Line ' + i;
   //         })
   //       };
@@ -22,7 +22,7 @@ $(document).ready(function () {
   //         name: 'Dataset ' + i,
   //         x: _.range(0, 10 + 1),
   //         y: _.range(0, 10 * (i + 1) + 10, i),
-  //         meta: _.map(_.range(0, 10 * (i + 1) + 10, i), function () {
+  //         tooltip: _.map(_.range(0, 10 * (i + 1) + 10, i), function () {
   //           return 'Line ' + i;
   //         })
   //       };
@@ -41,17 +41,17 @@ $(document).ready(function () {
   //     name: 'Dataset 1',
   //     x: _.map(_.range(1, 10 + 1), function (i) { return -5 + i + Math.random(); }),
   //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random() - 1.5; }),
-  //     meta: []
+  //     tooltip: []
   //   }, {
   //     name: 'Dataset 2',
   //     x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
   //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-  //     meta: []
+  //     tooltip: []
   //   }, {
   //     name: 'Dataset 3',
   //     x: _.map(_.range(1, 10 + 1), function (i) { return -2 + i + Math.random(); }),
   //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-  //     meta: []
+  //     tooltip: []
   //   }]
   // }
 
@@ -66,13 +66,38 @@ $(document).ready(function () {
       name: 'Single Dataset',
       x: _.range(1, 10 + 1),
       y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-      meta: []
+      tooltip: []
     }]
   }
 
+  O_o.setGlobalOptions({ alignRightPoint: true, alignLeftAxes: true })
+
   $('<div>', { id: 'chart-container' }).css('margin-bottom', 40).appendTo('body');
   // make a new chart
-  var chart = new O_o.Chart(single_dataset_data, { container: '#chart-container' });
+  var chart = new O_o.Chart(single_dataset_data, {
+    container: '#chart-container',
+    type: 'line',
+    x_axis_lower_bound_zero: true,
+    y_axis_lower_bound_zero: true
+  });
+
+  resetChart = function () {
+    single_dataset_data = {
+      labels: _.map(_.range(0, 12 + 1), function (i) {
+        return {
+          x: i,
+          label: 'x label: ' + i
+        };
+      }),
+      datasets: [{
+        name: 'Single Dataset',
+        x: _.range(1, 10 + 1),
+        y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
+        tooltip: []
+      }]
+    }
+    chart.reset(single_dataset_data)
+  }
 
   var data2 = {
     labels: _.map(_.range(-1, 32), function (i) {
@@ -87,7 +112,7 @@ $(document).ready(function () {
           name: 'Dataset that has a very long name: ' + i,
           x: _.range(0, 30 + 1),
           y: _.map(_.range(0, 30 + 1), function () { return 0; }),
-          meta: _.map(_.range(0, 30 + 1), function () {
+          tooltip: _.map(_.range(0, 30 + 1), function () {
             return 'Line that has a ridiculously long name and really should be shortened don\'t you think ' + i;
           })
         };
@@ -96,7 +121,7 @@ $(document).ready(function () {
           name: 'Dataset that has a very long name: ' + i,
           x: _.range(0, 30 + 1),
           y: _.range(0, 30 * (i + 1) + 30, i),
-          meta: _.map(_.range(0, 30 * (i + 1) + 30, i), function () {
+          tooltip: _.map(_.range(0, 30 * (i + 1) + 30, i), function () {
             return 'Line that has a ridiculously long name and really should be shortened don\'t you think ' + i;
           })
         };

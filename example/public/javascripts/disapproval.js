@@ -931,593 +931,6 @@
 
   });
 
-  // Store a collection of all charts created
-  var all_charts = [];
-
-  // O_o.Chart
-  // -------------------
-
-  // Datasets must contian labels with values at the very minimum span the set
-  // of possible x values.  Dataset must be composed of ordered functional
-  // values, meaning that x values must increase with each datum.
-
-  var Chart = O_o.Chart = function (data, options) {
-    all_charts.push(this);
-    this.cid = _.uniqueId('view');
-    options || (options = {});
-    if (options.globalOptions) _.extend(globalOptions, options.globalOptions);
-    _.extend(this, _.pick(options, chartOptions));
-    this._ensureElement();
-    this._attachToContainer();
-    this._reset();
-    this.initialize.apply(this, arguments);
-    this.listenTo(O_o, 'shrink', this._shrink);
-    this.listenTo(O_o, 'grow', this._grow);
-    this.listenTo(O_o, 'set_size', this._setSize);
-    this.listenTo(O_o, 'calculate_label_dimensions', this._calculateLabelDimensions);
-    this.listenTo(O_o, 'set_canvas', this._setCanvas);
-    this.listenTo(O_o, 'calculate_axes', this._calculateAxes);
-    this.listenTo(O_o, 'set_axes', this._setAxes);
-    this.listenTo(O_o, 'set_point_thresholds', this._setPointThresholds);
-    if (data) this._setup(data, _.extend({ silent: true }, options));
-    this.delegateEvents();
-    this.renderLegend();
-
-    // This is overkill if there are multiple charts. It would be better to only
-    // do this once after all charts have been added.
-    O_o.trigger('shrink');
-    O_o.trigger('grow');
-    O_o.trigger('set_size');
-    O_o.trigger('calculate_label_dimensions'); // best guess at size
-    O_o.trigger('set_canvas');
-    O_o.trigger('calculate_axes');
-    O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
-    O_o.trigger('set_canvas');
-    O_o.trigger('set_axes');
-    O_o.trigger('set_point_thresholds');
-    O_o.trigger('render');
-
-    this.render();
-  };
-
-  // List of chart options to be merged as properties.
-  var chartOptions = [
-    'container', 'el', 'id', 'attributes', 'className', 'tagName', 'events',
-    'type', 'aspect_ratio', 'grid_stroke_color', 'grid_stroke_width',
-    'grid_show_lines', 'axes_stroke_color', 'axes_stroke_width',
-    'axes_font_family', 'axes_font_size', 'axes_font_color',
-    'x_axis_lower_bound_zero', 'y_axis_lower_bound_zero', 'point_radius',
-    'point_stroke_width', 'line_stroke_width', 'bar_stroke_width',
-    'bar_spacing', 'tooltip_offset', 'tooltip_font_family',
-    'tooltip_font_color', 'tooltip_font_size', 'tooltip_font_weight',
-    'tooltip_letter_spacing', 'legend_font_family', 'legend_font_color',
-    'legend_font_size'
-  ];
-
-  _.extend(Chart.prototype, View.prototype, {
-    container: 'body',
-
-    events: {
-      'mousemove': '_triggerMousemove',
-      'mouseleave': '_triggerMouseleave'
-    },
-
-    _triggerMousemove: function (event) {
-      var offset = this.$el.offset();
-      this.trigger('mousemove', {
-        x: event.pageX - offset.left,
-        y: event.pageY - offset.top
-      });
-    },
-
-    _triggerMouseleave: function (event) {
-      this.trigger('mouseleave');
-    },
-
-    _attachToContainer: function () {
-      this.$container = $(this.container);
-      this.$chart_container = $('<div>', { class: 'disapproval-chart-container' });
-      $(this.container).append(this.$chart_container.append(this.$el));
-    },
-
-    _reset: function () {
-      if (this.datasets) _.each(this.datasets, function (dataset) {
-        dataset.set([]); // TODO: fix this hack, see PointView
-        dataset.remove();
-      });
-      this.datasets = [];
-      this.data_range = { x_min: Infinity, x_max: -Infinity, y_min: Infinity, y_max: -Infinity };
-      this.canvas = {
-        left: { width: 0, height: 0, offset: { x: 0, y: 0 }},
-        bottom: { width: 0, height: 0, offset: { x: 0, y: 0 }},
-        main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
-      };
-      if (this.tooltipCollection) {
-        this.tooltipCollection.set([]); // it's important to remove any stray tooltip items
-      } else {
-        this.tooltipCollection = new O_o.Collection([], { comparator: function (model) { return -model.get('y'); } });
-        this.tooltipCollection.chart = this;
-      }
-    },
-
-    _setBounds: function () {
-      // TODO: this could be optimized, especially for equally spaced x data between datasets
-      _.each(this.datasets, function (dataset) {
-        var x_min = _.min(dataset.pluck('x'));
-        var x_max = _.max(dataset.pluck('x'));
-        var y_min = _.min(dataset.pluck('y'));
-        var y_max = _.max(dataset.pluck('y'));
-        if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
-        if ( x_max > this.data_range.x_max) this.data_range.x_max = x_max;
-        if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
-        if ( y_max > this.data_range.y_max) this.data_range.y_max = y_max;
-
-        if (this.data_range.y_min > 0 && this.y_axis_lower_bound_zero) {
-          this.data_range.y_min = 0;
-        }
-        if (this.data_range.x_min > 0 && this.x_axis_lower_bound_zero) {
-          this.data_range.x_min = 0;
-        }
-      }, this);
-
-      var natural_y_bounds = this._naturalBoundsY();
-      var natural_x_bounds = this._naturalBoundsX();
-      this.bounds = {
-        y_min: natural_y_bounds.min,
-        y_max: natural_y_bounds.max,
-        y_step: natural_y_bounds.step,
-        x_min: natural_x_bounds.min,
-        x_max: natural_x_bounds.max,
-        x_step: natural_x_bounds.step
-      }
-    },
-
-    _naturalBoundsY: function () {
-      var range = this.data_range.y_max - this.data_range.y_min;
-
-      // Determine the steps in divisions of the relevant power of 10.
-      // e.g division of 0 0.25 0.5 0.75 are natural for data bounded by 1
-      // and divisions of 0 2.5 5 7.5 are natural for data bounded by 10
-      var step = Math.pow(10, String(Math.floor(range)).length - 1);
-      if (range > 0) {
-        while (range / step < 11) {
-          step /= 2;
-        }
-      }
-      var lower_bound;
-      if (this.data_range.y_min >= 0 && this.data_range.y_min < step) {
-        lower_bound = 0;
-      } else {
-        lower_bound = Math.floor(this.data_range.y_min / step) * step;
-      }
-
-      var upper_bound = Math.ceil(this.data_range.y_max / step) * step + step / 2;
-      return { min: lower_bound, max: upper_bound, step: step };
-    },
-
-    _naturalBoundsX: function () {
-      var lower_bound;
-      var upper_bound;
-      var total_steps;
-      var step;
-      var chart_padding;
-
-      if (this.type == 'bar') {
-        lower_bound = this.data_range.x_min
-        upper_bound = this.data_range.x_max
-        total_steps = this.datasets[0].length - 1;
-        if (total_steps == 0) {
-          step = 1;
-        } else {
-          step = (upper_bound - lower_bound) / (total_steps);
-        }
-        chart_padding = step * 3 / 4;
-        return { min: lower_bound - chart_padding, max: upper_bound + chart_padding, step: step };
-      }
-
-      var label_min = _.max(_.filter(this.labels, function (label) { return label.x <= this.data_range.x_min; }, this), function (label) { return label.x });
-      var label_max = _.min(_.filter(this.labels, function (label) { return label.x >= this.data_range.x_max; }, this), function (label) { return label.x });
-
-      var labels = _.reject(this.labels, function (label) {
-        return (label.x < label_min.x || label.x > label_max.x);
-      });
-
-      total_steps = labels.length - 1;
-      if (total_steps == 0) {
-        step = 1;
-        chart_padding = step * 3 / 4;
-        return { min: label_min.x - chart_padding, max: label_max.x + chart_padding, step: step };
-      } else {
-        step = (label_max.x - label_min.x) / (total_steps)
-      }
-
-      if (this.data_range.x_min >= 0 && this.data_range.x_min < step) {
-        lower_bound = 0;
-      } else {
-        lower_bound = label_min.x;
-      }
-
-      if (globalOptions.multiple_charts_align_right_point) {
-        // NOTE: This approach only works if the left axes are also aligned
-        // otherwise the right points will be off by 4% of the difference
-        // of the label widths.
-        // TODO: take differences in main canvas size into account so that the
-        // right points will align without the left axes being aligned
-        upper_bound = lower_bound + (this.data_range.x_max - lower_bound) * 1.04;
-      } else if (label_max.x - step == this.data_range.x_max) {
-        upper_bound = this.data_range.x_max + step / 2;
-      } else {
-        upper_bound = label_max.x + step / 2;
-      }
-      return { min: lower_bound, max: upper_bound, step: step };
-    },
-
-    _calculateAxes: function () {
-      var padding = 7;
-
-      // y-axis
-      var y_step = this.bounds.y_step;
-      while ((this.canvas.left.label.height + padding) * _.range(this.bounds.y_min, this.bounds.y_max, y_step).length > this.canvas.left.height) {
-        y_step *= 2;
-      }
-      var y_values = _.map(_.range(this.bounds.y_min, this.bounds.y_max, y_step), function (y) {
-        return {
-          y: y,
-          label: String(y) // TODO: format as desired
-        };
-      }, this);
-      if (!this.y_axis) {
-        this.y_axis = new O_o.Collection();
-        this.y_axis.chart = this;
-      }
-      this.y_axis.new_values = y_values;
-
-      // x-axis
-      if (this.type == 'bar' && this.labels.length == 0) {
-        this.labels = _.map(_.range(this.data_range.x_min, this.data_range.x_max + this.bounds.x_step, this.bounds.x_step), function (x) {
-          return { x: x, label: '' }
-        });
-      }
-
-      var labels = _.reject(this.labels, function (label) {
-        return (label.x < this.bounds.x_min || label.x > this.bounds.x_max)
-      }, this);
-      while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
-        if (labels.length <= 2) break; // break if the label width is wider than the chart
-        labels = _.select(labels, function (x, i) { return i % 2 == 0; });
-      }
-
-      if (!this.x_axis) {
-        this.x_axis = new O_o.Collection();
-        this.x_axis.chart = this;
-      }
-      this.x_axis.new_values = labels;
-    },
-
-    _setAxes: function () {
-      if (globalOptions.multiple_charts_align_left_axes) {
-        var max_left_label_width = _.max(_.map(all_charts, function (chart) {
-          return chart.canvas.left.label.width;
-        }));
-        if (this.canvas.left.label.width < max_left_label_width) this.canvas.left.label.width = max_left_label_width;
-        this._setCanvas();
-      }
-      if (globalOptions.multiple_charts_align_right_point) {
-        // TODO: corresponding to the note above, in order to do this more correctly,
-        // the differences in the widths of the main canvas should be taken into account
-        var min_total_canvas_width = _.min(_.map(all_charts, function (chart) {
-          return chart.canvas.main.width + chart.canvas.left.width;
-        }));
-        if (this.canvas.main.width + this.canvas.left.width > min_total_canvas_width) {
-          this.canvas.bottom.width = this.canvas.main.width = min_total_canvas_width - this.canvas.left.width;
-          this._setCanvasHeights();
-        }
-      }
-
-      this.y_axis.set(this.y_axis.new_values);
-      this.x_axis.set(this.x_axis.new_values);
-    },
-
-    _setPointThresholds: function () {
-      _.each(this.datasets, function (dataset) {
-        dataset.each(function (point, i) {
-          if (dataset.models[i + 1]) {
-            var threshold = this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2;
-            point.set('threshold_right', threshold);
-            if (i == 0) {
-              point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
-            }
-            dataset.models[i + 1].set('threshold_left', threshold);
-          } else if (dataset.length == 1) {
-            point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
-            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
-          } else {
-            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
-          }
-        }, this);
-      }, this);
-    },
-
-    _shrink: function () {
-      this.$el.attr({ width: 0, height: 0 });
-    },
-
-    _grow: function () {
-      // set best guess at height of container
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
-    },
-
-    _setSize: function () {
-      // reset height with updated width from the potential addition of a scrollbar
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
-      // grab accurate dimensions
-      this.width = this.$chart_container.width();
-      this.height = this.$chart_container.height();
-      this.$el.attr({
-        width: this.width,
-        height: this.height
-      });
-    },
-
-    _calculateLabelDimensions: function() {
-      this._calculateYLabel();
-      this._calculateXLabels();
-    },
-
-    _calculateYLabel: function () {
-      var label_text;
-      if (this.y_axis && this.y_axis.new_values) {
-        // calculate the widest text label
-        // perferring highest value will choose the widest rendered string
-        // e.g. 1000 is wider than 87.5
-        var max_length = 0;
-        _.each(this.y_axis.new_values, function (value) {
-          if (value.label.length >= max_length) {
-            max_length = value.label.length;
-            label_text = value.label;
-          }
-        });
-      } else {
-        label_text = String(this.bounds.y_max); // TODO: Change from String to the correct function if labels are formatted
-      }
-
-      // create svg text element and to append it to the DOM in order to get width
-      var label = svg$el('text').html(label_text).attr({
-        'font-family': this.axes_font_family,
-        'font-size': this.axes_font_size
-      });
-      var temp_svg = svg$el('svg').css('visibility', 'hidden');
-      $('body').append(temp_svg);
-      temp_svg.append(label);
-      this.canvas.left.label = {
-        width: label.width(),
-        height: this.axes_font_size
-      }
-      temp_svg.remove();
-    },
-
-    _calculateXLabels: function () {
-      this.canvas.bottom.label = {
-        width: 0,
-        height: this.axes_font_size
-      };
-
-      var temp_svg = svg$el('svg').css('visibility', 'hidden');
-      $('body').append(temp_svg);
-      _.each(this.labels, function (label) {
-        label = svg$el('text').html(label.label).attr({
-          'font-family': this.axes_font_family,
-          'font-size': this.axes_font_size
-        });
-        temp_svg.append(label);
-        var width = label.width();
-        if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
-      }, this);
-      temp_svg.remove();
-    },
-
-    _setCanvas: function () {
-      this._setCanvasWidths();
-      this._setCanvasHeights();
-      if (this.canvas.bottom.label.is_tilted) {
-        this._alterCanvasWidthsForTiltedLabels();
-      }
-    },
-
-    _setCanvasWidths: function () {
-      var padding = 10;
-      var width = this.canvas.left.label.width + padding;
-      this.canvas.left.width = this.canvas.bottom.offset.x = this.canvas.main.offset.x = width;
-      this.canvas.bottom.width = this.canvas.main.width = this.width - width;
-    },
-
-    _setCanvasHeights: function () {
-      var padding = 10;
-
-      var label_width = this.canvas.bottom.label.width;
-      var max_available_label_space = this.canvas.bottom.width / _.range(this.bounds.x_min, this.bounds.x_max, this.bounds.x_step).length;
-      var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x;
-
-      var height;
-      if (label_width > max_available_label_space || label_width / 2 > first_x_tick_x_offset) {
-        height = this.canvas.bottom.label.width / Math.sqrt(2) + 2 * padding;
-        this.canvas.bottom.label.is_tilted = true;
-      } else {
-        height = this.canvas.bottom.label.height + 2 * padding;
-        this.canvas.bottom.label.is_tilted = false;
-      }
-      this.canvas.bottom.height = height;
-      this.canvas.left.height = this.canvas.main.height = this.canvas.bottom.offset.y = this.height - height;
-    },
-    
-    _alterCanvasWidthsForTiltedLabels: function () {
-      this.canvas.bottom.width = this.canvas.main.width = this.canvas.bottom.width - this.canvas.bottom.label.width / Math.sqrt(2);
-    },
-
-    // also remove this from the collection of all charts when a chart is removed
-    remove: function () {
-      all_charts = _.without(all_charts, this);
-      O_o.View.prototype.remove.call(this);
-    },
-
-    // public methods
-    reset: function (data, options) {
-      this._setup(data, options);
-
-      if (this.datasets.length == 1) {
-        this.legendView.$el.hide();
-      } else {
-        this.legendView.$el.show();
-      }
-
-      this.trigger('render_legend');
-
-      O_o.trigger('shrink');
-      O_o.trigger('grow');
-      O_o.trigger('set_size');
-      O_o.trigger('calculate_label_dimensions'); // best guess at size
-      O_o.trigger('set_canvas');
-      O_o.trigger('calculate_axes');
-      O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
-      O_o.trigger('set_canvas');
-      O_o.trigger('set_axes');
-      O_o.trigger('set_point_thresholds');
-      O_o.trigger('render');
-
-      this.trigger('render')
-
-      return this;
-    },
-
-    // public methods
-    _setup: function (data, options) {
-      options || (options = {});
-      this._reset();
-      this.labels = data.labels;
-      var color_palette = data.datasets.length > 10 ? color_palette_20 : color_palette_10;
-      this.datasets = _.map(data.datasets, function (dataset, i) {
-        var points = _.map(dataset.x, function (x, j) {
-          return {
-            x: dataset.x[j],
-            y: dataset.y[j],
-            meta: dataset.meta[j]
-          };
-        });
-        var dataset_collection = new O_o.Collection(points);
-        dataset_collection.name = dataset.name;
-        dataset_collection.color = chartColoring(i, color_palette);
-        dataset_collection.chart = this;
-        return dataset_collection;
-      }, this);
-      if (this.cached_type == 'bar') this.type = 'bar';
-      if (this.cached_y_axis_lower_bound_zero == false) this.y_axis_lower_bound_zero = false;
-      if (this.type == 'bar') {
-        if (this.datasets.length > 1) {
-          // bar charts are for one dataset only
-          this.cached_type = 'bar';
-          this.type = 'line';
-        } else {
-          // bar charts should begin at y = 0
-          this.cached_y_axis_lower_bound_zero = this.y_axis_lower_bound_zero;
-          this.y_axis_lower_bound_zero = true;
-        }
-      }
-      this.max_points = _.max(_.map(this.datasets, function (dataset) { return dataset.length; }));
-      this._setBounds();
-      if (!options.silent) this.trigger('reset', this, options);
-      return this;
-    },
-
-    xScale: function (x) {
-      return this.xConversion(x - this.bounds.x_min);
-    },
-
-    xConversion: function (x) {
-      return x * this.canvas.main.width / (this.bounds.x_max - this.bounds.x_min);
-    },
-
-    yScale: function (y) {
-      return this.canvas.main.height - this.yConversion(y - this.bounds.y_min);
-    },
-
-    yConversion: function (y) {
-      return y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
-    },
-
-    // TODO: delete these
-    // inverseXScale: function (x) {
-    //   return x * (this.bounds.x_max - this.bounds.x_min) / this.canvas.main.width + this.bounds.x_min;
-    // },
-
-    // inverseYScale: function (y) {
-    //   return (1 - y / this.canvas.main.height) * (this.bounds.y_max - this.bounds.y_min) + this.bounds.y_min;
-    // },
-
-    renderLegend: function () {
-      this.legendView = new LegendView({ model: this });
-      if (this.datasets.length == 1) this.legendView.$el.hide();
-      this.$container.append(this.legendView.$el);
-      this.legendView._applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
-    },
-
-    render: function () {
-      this.$el.append(new LeftView({ model: this }).$el);
-      this.$el.append(new BottomView({ model: this }).$el);
-      this.$el.append(new MainView({ model: this }).$el);
-      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
-        position: 'absolute',
-        'border-radius': 3,
-        'background-color': 'rgba(0,0,0,0.8)',
-        '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
-        '-moz-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
-        'box-shadow': '0px 1px 2px rgba(0,0,0,0.2)'
-      }).hide();
-      $('body').append(this.tooltipCollection.$container.append(new TooltipView({ collection: this.tooltipCollection }).$el));
-    },
-
-    initialize: function () {},
-
-    type: 'bar',
-
-    aspect_ratio: 16 / 9,
-
-    grid_stroke_color: "rgba(0,0,0,0.06)",
-    grid_stroke_width: 1,
-    grid_show_lines: true,
-
-    axes_stroke_color: "rgba(0,0,0,0.15)",
-    axes_stroke_width: 1,
-    axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    axes_font_size: 12,
-    axes_font_color: "rgba(0,0,0,0.7)",
-    x_axis_lower_bound_zero: false,
-    y_axis_lower_bound_zero: false,
-
-    point_radius: 3.8,
-    point_stroke_width: 1.2,
-
-    line_stroke_width: 2,
-
-    bar_stroke_width: 2,
-    bar_spacing: 0.1,
-
-    tooltip_offset: 10,
-    tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    tooltip_font_color: "rgba(255,255,255,1)",
-    tooltip_font_size: 15,
-    tooltip_font_weight: 'lighter',
-    tooltip_letter_spacing: 1.8,
-
-    legend_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    legend_font_color: "rgba(0,0,0,0.7)",
-    legend_font_size: 15
-  });
-
-
-
-
-
-
   // Helpers
   // -------
 
@@ -1558,22 +971,7 @@
   };
 
   // Set up inheritance for the model, collection.
-  Model.extend = Collection.extend = View.extend = Chart.extend = extend;
-
-  $(window).resize(_.debounce(function () {
-    // Do not change this willy-nilly
-    O_o.trigger('shrink');
-    O_o.trigger('grow');
-    O_o.trigger('set_size');
-    O_o.trigger('calculate_label_dimensions'); // best guess at size
-    O_o.trigger('set_canvas');
-    O_o.trigger('calculate_axes');
-    O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
-    O_o.trigger('set_canvas');
-    O_o.trigger('set_axes');
-    O_o.trigger('set_point_thresholds');
-    O_o.trigger('render');
-  }, 300));
+  Model.extend = Collection.extend = View.extend = extend;
 
   // Define which tag are svg namespaced
   // NOTE: this approch isn't general because some of the tag names overlap.
@@ -1624,8 +1022,12 @@
   ];
 
   var globalOptions = {
-    multiple_charts_align_left_axes: false,
-    multiple_charts_align_right_point: false
+    alignLeftAxes: false,
+    alignRightPoint: false
+  };
+
+  O_o.setGlobalOptions = function (options) {
+    if (options) _.extend(globalOptions, options);
   };
 
   function chartColoring(i, color_palette) {
@@ -1647,6 +1049,604 @@
     attributes || (attributes = {});
     return O_o.$(document.createElementNS('http://www.w3.org/2000/svg', tag_name)).attr(attributes);
   }
+
+  $(window).resize(_.debounce(function () {
+    // Do not change this willy-nilly
+    O_o.trigger('shrink');
+    O_o.trigger('grow');
+    O_o.trigger('set_size');
+    O_o.trigger('calculate_label_dimensions'); // best guess at size
+    O_o.trigger('set_canvas');
+    O_o.trigger('calculate_axes');
+    O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+    O_o.trigger('set_canvas');
+    O_o.trigger('set_axes');
+    O_o.trigger('set_point_thresholds');
+    O_o.trigger('render');
+  }, 300));
+
+  // Store a collection of all charts created
+  var all_charts = [];
+
+
+  // O_o.Chart
+  // -------------------
+
+  // Datasets must contian labels with values at the very minimum span the set
+  // of possible x values.  Dataset must be composed of ordered functional
+  // values, meaning that x values must increase with each datum.
+
+  var Chart = O_o.Chart = function (data, options) {
+    all_charts.push(this);
+    this.cid = _.uniqueId('view');
+    options || (options = {});
+    _.extend(this, _.pick(options, chartOptions));
+    this._ensureElement();
+    this._attachToContainer();
+    this._reset();
+    this.initialize.apply(this, arguments);
+    this.listenTo(O_o, 'shrink', this._shrink);
+    this.listenTo(O_o, 'grow', this._grow);
+    this.listenTo(O_o, 'set_size', this._setSize);
+    this.listenTo(O_o, 'calculate_label_dimensions', this._calculateLabelDimensions);
+    this.listenTo(O_o, 'set_canvas', this._setCanvas);
+    this.listenTo(O_o, 'calculate_axes', this._calculateAxes);
+    this.listenTo(O_o, 'set_axes', this._setAxes);
+    this.listenTo(O_o, 'set_point_thresholds', this._setPointThresholds);
+    if (data) this._setup(data, _.extend({ silent: true }, options));
+    this.delegateEvents();
+    this.renderLegend();
+
+    window.setTimeout($.proxy(function () {
+      // only trigger these global events once
+      if (all_charts.indexOf(this) == 0) {
+        O_o.trigger('shrink');
+        O_o.trigger('grow');
+        O_o.trigger('set_size');
+        O_o.trigger('calculate_label_dimensions'); // best guess at size
+        O_o.trigger('set_canvas');
+        O_o.trigger('calculate_axes');
+        O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+        O_o.trigger('set_canvas');
+        O_o.trigger('set_axes');
+        O_o.trigger('set_point_thresholds');
+      }
+      // setup views after sizing has been globally determined
+      this.createChartViews();
+    }, this), 0);
+
+  };
+
+  // List of chart options to be merged as properties.
+  var chartOptions = [
+    'container', 'el', 'id', 'attributes', 'className', 'tagName', 'events',
+    'type', 'aspect_ratio', 'stepsToExtendYAxis', 'stepsToExtendXAxis',
+    'grid_stroke_color', 'grid_stroke_width',
+    'grid_show_lines', 'axes_stroke_color', 'axes_stroke_width',
+    'axes_font_family', 'axes_font_size', 'axes_font_color',
+    'x_axis_lower_bound_zero', 'y_axis_lower_bound_zero', 'point_radius',
+    'point_stroke_width', 'line_stroke_width', 'bar_stroke_width',
+    'bar_spacing', 'tooltip_offset', 'tooltip_font_family',
+    'tooltip_font_color', 'tooltip_font_size', 'tooltip_font_weight',
+    'tooltip_letter_spacing', 'legend_font_family', 'legend_font_color',
+    'legend_font_size'
+  ];
+
+  _.extend(Chart.prototype, View.prototype, {
+
+    events: {
+      'mousemove': '_triggerMousemove',
+      'mouseleave': '_triggerMouseleave'
+    },
+
+    // _ensureElement
+    // _attachToContainer
+    _attachToContainer: function () {
+      if (_.isUndefined(this.container)) {
+        throw new Error('No container assigened. A O_o.Chart must specify a container. Example: new O_o.Chart(data, { container: \'#chart-container\' });');
+      }
+      this.$container = $(this.container);
+      if (this.$container.length == 0) {
+        throw new Error('Container element ' + this.container + ' was not found in the DOM. Please ensure the container element exists before assigning it to a O_o.Chart.');
+      } else {
+        this.$chart_container = $('<div>', { class: 'disapproval-chart-container' });
+      }
+      this.$container.append(this.$chart_container.append(this.$el));
+    },
+
+    // _reset
+    _reset: function () {
+      if (this.datasets) _.each(this.datasets, function (dataset) {
+        dataset.set([]); // TODO: fix this hack, see PointView
+        dataset.remove();
+      });
+      this.datasets = [];
+      this.data_range = { x_min: Infinity, x_max: -Infinity, y_min: Infinity, y_max: -Infinity };
+      this.bounds = {};
+      this.canvas = {
+        left: { width: 0, height: 0, offset: { x: 0, y: 0 }},
+        bottom: { width: 0, height: 0, offset: { x: 0, y: 0 }},
+        main: { width: 0, height: 0, offset: { x: 0, y: 0 }}
+      };
+      if (this.tooltipCollection) {
+        this.tooltipCollection.set([]); // it's important to remove any stray tooltip items
+      } else {
+        this.tooltipCollection = new O_o.Collection([], { comparator: function (model) { return -model.get('y'); } });
+        this.tooltipCollection.chart = this;
+      }
+    },
+
+    // initialize
+    initialize: function () {},
+
+    // _setup
+    _setup: function (data, options) {
+      options || (options = {});
+      this._reset();
+      this.labels = data.labels;
+      var color_palette = data.datasets.length > 10 ? color_palette_20 : color_palette_10;
+      this.datasets = _.map(data.datasets, function (dataset, i) {
+        var points = _.map(dataset.x, function (x, j) {
+          return {
+            x: dataset.x[j],
+            y: dataset.y[j],
+            tooltip: dataset.tooltip[j]
+          };
+        });
+        var dataset_collection = new O_o.Collection(points);
+        dataset_collection.name = dataset.name;
+        dataset_collection.color = chartColoring(i, color_palette);
+        dataset_collection.chart = this;
+        return dataset_collection;
+      }, this);
+      if (this.cached_type == 'bar') this.type = 'bar';
+      if (this.cached_y_axis_lower_bound_zero == false) this.y_axis_lower_bound_zero = false;
+      if (this.type == 'bar') {
+        if (this.datasets.length > 1) {
+          // bar charts are for one dataset only
+          this.cached_type = 'bar';
+          this.type = 'line';
+        } else {
+          // bar charts should begin at y = 0
+          this.cached_y_axis_lower_bound_zero = this.y_axis_lower_bound_zero;
+          this.y_axis_lower_bound_zero = true;
+        }
+      }
+      this._setBounds();
+      if (!options.silent) this.trigger('reset', this, options);
+      return this;
+    },
+
+    _setBounds: function () {
+      // TODO: this could be optimized, especially for equally spaced x data between datasets
+      _.each(this.datasets, function (dataset) {
+        var x_min = _.min(dataset.pluck('x'));
+        var x_max = _.max(dataset.pluck('x'));
+        var y_min = _.min(dataset.pluck('y'));
+        var y_max = _.max(dataset.pluck('y'));
+        if ( x_min < this.data_range.x_min) this.data_range.x_min = x_min;
+        if ( x_max > this.data_range.x_max) this.data_range.x_max = x_max;
+        if ( y_min < this.data_range.y_min) this.data_range.y_min = y_min;
+        if ( y_max > this.data_range.y_max) this.data_range.y_max = y_max;
+      }, this);
+
+      _.extend(this.bounds, this._naturalBoundsX());
+      _.extend(this.bounds, this._naturalBoundsY());
+    },
+
+    _naturalBoundsX: function () {
+      var lower_bound;
+      var upper_bound;
+      var total_steps;
+      var step;
+
+      var x_min = this.data_range.x_min;
+      if (x_min > 0 && this.x_axis_lower_bound_zero) x_min = 0;
+
+      if (this.type == 'bar') {
+        lower_bound = x_min;
+        upper_bound = this.data_range.x_max;
+        total_steps = this.datasets[0].length - 1;
+        if (total_steps == 0) {
+          step = 1;
+        } else {
+          step = (upper_bound - lower_bound) / (total_steps);
+        }
+        return { x_min: lower_bound - step * 3 / 4, x_max: upper_bound + step * 3 / 4, x_step: step };
+      }
+
+      var label_min = _.max(_.filter(this.labels, function (label) { return label.x <= x_min; }, this), function (label) { return label.x });
+      var label_max = _.min(_.filter(this.labels, function (label) { return label.x >= this.data_range.x_max; }, this), function (label) { return label.x });
+
+      var labels = _.reject(this.labels, function (label) {
+        return (label.x < label_min.x || label.x > label_max.x);
+      });
+
+      total_steps = labels.length - 1;
+      if (total_steps == 0) {
+        step = 1;
+        return { x_min: label_min.x - step * 3 / 4, x_max: label_max.x + step * 3 / 4, x_step: step };
+      } else {
+        step = (label_max.x - label_min.x) / (total_steps)
+      }
+
+      if (x_min >= 0 && x_min < step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = label_min.x;
+      }
+
+      if (globalOptions.alignRightPoint) {
+        // NOTE: This approach only works if the left axes are also aligned
+        // otherwise the right points will be off by 4% of the difference
+        // of the label widths.
+        // TODO: take differences in main canvas size into account so that the
+        // right points will align without the left axes being aligned
+        this.cached_stepsToExtendXAxis = this.stepsToExtendXAxis;
+        this.stepsToExtendXAxis = 0.04 * (this.data_range.x_max - lower_bound);
+      } else if (this.cached_stepsToExtendXAxis) {
+        this.stepsToExtendXAxis = this.cached_stepsToExtendXAxis;
+      }
+
+      if (label_max.x - step == this.data_range.x_max) {
+        upper_bound = this.data_range.x_max + step * this.stepsToExtendXAxis;
+      } else {
+        upper_bound = label_max.x + step * this.stepsToExtendXAxis;
+      }
+
+      return { x_min: lower_bound, x_max: upper_bound, x_step: step };
+    },
+
+    _naturalBoundsY: function () {
+      var y_min = this.data_range.y_min;
+      if (y_min > 0 && this.y_axis_lower_bound_zero) y_min = 0;
+
+      var range = this.data_range.y_max - y_min;
+
+      // Determine the steps in divisions of the relevant power of 10.
+      // e.g division of 0 0.25 0.5 0.75 are natural for data bounded by 1
+      // and divisions of 0 2.5 5 7.5 are natural for data bounded by 10
+      var step = Math.pow(10, String(Math.floor(range)).length - 1);
+      if (range > 0) {
+        while (range / step < 11) {
+          step /= 2;
+        }
+      }
+
+      var lower_bound;
+      if (y_min >= 0 && y_min < step) {
+        lower_bound = 0;
+      } else {
+        lower_bound = Math.floor(y_min / step) * step;
+      }
+
+      var upper_bound = Math.ceil(this.data_range.y_max / step) * step + step * this.stepsToExtendYAxis;
+
+      return { y_min: lower_bound, y_max: upper_bound, y_step: step };
+    },
+
+    // _shrink
+    _shrink: function () {
+      this.$el.attr({ width: 0, height: 0 });
+    },
+
+    // _grow
+    _grow: function () {
+      // set best guess at height of container
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
+    },
+
+    // _setSize
+    _setSize: function () {
+      // reset height with updated width from the potential addition of a scrollbar
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
+      // grab accurate dimensions
+      this.width = this.$chart_container.width();
+      this.height = this.$chart_container.height();
+      this.$el.attr({
+        width: this.width,
+        height: this.height
+      });
+    },
+
+    // _calculateLabelDimensions
+    _calculateLabelDimensions: function() {
+      this._calculateXLabels();
+      this._calculateYLabels();
+    },
+
+    _calculateXLabels: function () {
+      this.canvas.bottom.label = {
+        width: 0,
+        height: this.axes_font_size
+      };
+
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
+      $('body').append(temp_svg);
+      _.each(this.labels, function (label) {
+        label = svg$el('text').html(label.label).attr({
+          'font-family': this.axes_font_family,
+          'font-size': this.axes_font_size
+        });
+        temp_svg.append(label);
+        var width = label.width();
+        if (width > this.canvas.bottom.label.width) this.canvas.bottom.label.width = width;
+      }, this);
+      temp_svg.remove();
+    },
+
+    _calculateYLabels: function () {
+      var label_text;
+      if (this.y_axis && this.y_axis.new_values) {
+        // calculate the widest text label
+        // perferring highest value will choose the widest rendered string
+        // e.g. 1000 is wider than 87.5
+        var max_length = 0;
+        _.each(this.y_axis.new_values, function (value) {
+          if (value.label.length >= max_length) {
+            max_length = value.label.length;
+            label_text = value.label;
+          }
+        });
+      } else {
+        label_text = String(this.bounds.y_max); // TODO: Change from String to the correct function if labels are formatted
+      }
+
+      // create svg text element and to append it to the DOM in order to get width
+      var label = svg$el('text').html(label_text).attr({
+        'font-family': this.axes_font_family,
+        'font-size': this.axes_font_size
+      });
+      var temp_svg = svg$el('svg').css('visibility', 'hidden');
+      $('body').append(temp_svg);
+      temp_svg.append(label);
+      this.canvas.left.label = {
+        width: label.width(),
+        height: this.axes_font_size
+      }
+      temp_svg.remove();
+    },
+
+    // _setCanvas
+    _setCanvas: function () {
+      var padding = 10;
+      var width = this.canvas.left.label.width + padding;
+      this.canvas.left.width = this.canvas.bottom.offset.x = this.canvas.main.offset.x = width;
+      this.canvas.bottom.width = this.canvas.main.width = this.width - width;
+
+      var label_width = this.canvas.bottom.label.width + padding;
+      var first_x_tick_x_offset = this.xScale(this.data_range.x_min) + this.canvas.main.offset.x;
+      var step_width = this.xConversion(this.bounds.x_step);
+
+      var height;
+      if (label_width / 2 > first_x_tick_x_offset || label_width > step_width || label_width > step_width * (0.5 + this.stepsToExtendXAxis)) {
+        var min_label_area_width = this.stepsToExtendXAxis < step_width ? step_width * this.stepsToExtendXAxis : step_width;
+        height = Math.sqrt(Math.pow(label_width + 0.5 * this.canvas.bottom.label.height, 2) - min_label_area_width * min_label_area_width);
+        this.canvas.bottom.label.tilt = Math.acos((min_label_area_width - 0.75 * this.canvas.bottom.label.height) / label_width) / 2 / Math.PI * 360;
+        if (this.canvas.bottom.label.tilt > 90) this.canvas.bottom.label.tilt = 90;
+      } else {
+        height = this.canvas.bottom.label.height;
+      }
+      height = height + 2 * padding
+      this.canvas.bottom.height = height;
+      this.canvas.left.height = this.canvas.main.height = this.canvas.bottom.offset.y = this.height - height;
+      if (this.canvas.main.height < 1) {
+        throw new Error('The plot is too small for the labels. Please shorten labels or increase plot size.');
+      };
+    },
+
+    // _calculateAxes
+    _calculateAxes: function () {
+      var padding = 5;
+
+      // y-axis
+      var y_step = this.bounds.y_step;
+      while ((this.canvas.left.label.height + padding) * _.range(this.bounds.y_min, this.bounds.y_max, y_step).length > this.canvas.left.height) {
+        y_step *= 2;
+      }
+      var y_values = _.map(_.range(this.bounds.y_min, this.bounds.y_max, y_step), function (y) {
+        return {
+          y: y,
+          label: String(y) // TODO: format as desired
+        };
+      }, this);
+      if (!this.y_axis) {
+        this.y_axis = new O_o.Collection();
+        this.y_axis.chart = this;
+      }
+      this.y_axis.new_values = y_values;
+
+      // x-axis
+      if (this.type == 'bar' && this.labels.length == 0) {
+        this.labels = _.map(_.range(this.data_range.x_min, this.data_range.x_max + this.bounds.x_step, this.bounds.x_step), function (x) {
+          return { x: x, label: '' }
+        });
+      }
+
+      var labels = _.reject(this.labels, function (label) {
+        // Truncating labels below the lower bound allows for a zero label,
+        // while truncating labels above the upper data range ensures
+        // no stray labels appear
+        return (label.x < this.bounds.x_min || label.x > this.data_range.x_max);
+      }, this);
+      while ((this.canvas.bottom.label.height + padding) * labels.length + this.canvas.bottom.label.width > this.canvas.bottom.width) {
+        if (labels.length <= 2) break; // break if the label width is wider than the chart
+        labels = _.select(labels, function (x, i) { return i % 2 == 0; });
+      }
+
+      if (!this.x_axis) {
+        this.x_axis = new O_o.Collection();
+        this.x_axis.chart = this;
+      }
+      this.x_axis.new_values = labels;
+    },
+
+    // _setAxes
+    _setAxes: function () {
+      if (globalOptions.alignLeftAxes) {
+        var max_left_label_width = _.max(_.map(all_charts, function (chart) {
+          return chart.canvas.left.label.width;
+        }));
+        if (this.canvas.left.label.width < max_left_label_width) this.canvas.left.label.width = max_left_label_width;
+        this._setCanvas();
+      }
+
+      this.y_axis.set(this.y_axis.new_values);
+      this.x_axis.set(this.x_axis.new_values);
+    },
+
+    // _setPointThresholds
+    _setPointThresholds: function () {
+      _.each(this.datasets, function (dataset) {
+        dataset.each(function (point, i) {
+          if (dataset.models[i + 1]) {
+            var threshold = this.xConversion(dataset.models[i + 1].get('x') - point.get('x')) / 2;
+            point.set('threshold_right', threshold);
+            if (i == 0) {
+              point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
+            }
+            dataset.models[i + 1].set('threshold_left', threshold);
+          } else if (dataset.length == 1) {
+            point.set('threshold_left', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
+            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // corresponds to step default for one data point
+          } else {
+            point.set('threshold_right', this.xConversion(this.bounds.x_step / 2)); // an arbitrary choice
+          }
+        }, this);
+      }, this);
+    },
+
+    _triggerMousemove: function (event) {
+      _.each(all_charts, function (chart) {
+        if (this == chart) {
+          var offset = this.$el.offset();
+          this.trigger('mousemove', {
+            x: event.pageX - offset.left,
+            y: event.pageY - offset.top
+          });
+        } else {
+          // this ensures that the tooltip will be hidden for charts without focus
+          chart.trigger('mouseleave');
+        }
+      }, this);
+    },
+
+    _triggerMouseleave: function (event) {
+      var currentEl = event.toElement || event.relatedTarget;
+      if (!$(currentEl).hasClass('tooltip')) this.trigger('mouseleave');
+    },
+
+    // also remove this from the collection of all charts when a chart is removed
+    remove: function () {
+      all_charts = _.without(all_charts, this);
+      O_o.View.prototype.remove.call(this);
+    },
+
+    // public methods
+    reset: function (data, options) {
+      this._setup(data, options);
+
+      if (this.datasets.length == 1) {
+        this.legendView.$el.hide();
+      } else {
+        this.legendView.$el.show();
+      }
+
+      this.trigger('render_legend');
+
+      O_o.trigger('shrink');
+      O_o.trigger('grow');
+      O_o.trigger('set_size');
+      O_o.trigger('calculate_label_dimensions'); // best guess at size
+      O_o.trigger('set_canvas');
+      O_o.trigger('calculate_axes');
+      O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+      O_o.trigger('set_canvas');
+      O_o.trigger('set_axes');
+      O_o.trigger('set_point_thresholds');
+      O_o.trigger('render');
+
+      this.trigger('populate_data_views')
+
+      return this;
+    },
+
+    renderLegend: function () {
+      this.legendView = new LegendView({ model: this });
+      if (this.datasets.length == 1) this.legendView.$el.hide();
+      this.$container.append(this.legendView.$el);
+      this.legendView.applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
+    },
+
+    createChartViews: function () {
+      this.$el.append(new LeftView({ model: this }).$el);
+      this.$el.append(new BottomView({ model: this }).$el);
+      this.$el.append(new MainView({ model: this }).$el);
+      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
+        position: 'absolute',
+        'border-radius': 3,
+        'background-color': 'rgba(0,0,0,0.8)',
+        '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        '-moz-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        'box-shadow': '0px 1px 2px rgba(0,0,0,0.2)'
+      }).hide();
+      $('body').append(this.tooltipCollection.$container.append(new TooltipView({ collection: this.tooltipCollection }).$el));
+    },
+
+    xScale: function (x) {
+      return this.xConversion(x - this.bounds.x_min);
+    },
+
+    xConversion: function (x) {
+      return x * this.canvas.main.width / (this.bounds.x_max - this.bounds.x_min);
+    },
+
+    yScale: function (y) {
+      return this.canvas.main.height - this.yConversion(y - this.bounds.y_min);
+    },
+
+    yConversion: function (y) {
+      return y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
+    },
+
+    type: 'bar',
+
+    aspect_ratio: 16 / 9,
+
+    stepsToExtendYAxis: 0.95,
+    stepsToExtendXAxis: 0.95,
+
+    grid_stroke_color: "rgba(0,0,0,0.06)",
+    grid_stroke_width: 1,
+    grid_show_lines: true,
+
+    axes_stroke_color: "rgba(0,0,0,0.15)",
+    axes_stroke_width: 1,
+    axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    axes_font_size: 12,
+    axes_font_color: "rgba(0,0,0,0.7)",
+    x_axis_lower_bound_zero: false,
+    y_axis_lower_bound_zero: false,
+
+    point_radius: 3.8,
+    point_stroke_width: 1.2,
+
+    line_stroke_width: 2,
+
+    bar_stroke_width: 2,
+    bar_spacing: 0.1,
+
+    tooltip_offset: 10,
+    tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    tooltip_font_color: "rgba(255,255,255,1)",
+    tooltip_font_size: 15,
+    tooltip_font_weight: 'lighter',
+    tooltip_letter_spacing: 1.8,
+
+    legend_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    legend_font_color: "rgba(0,0,0,0.7)",
+    legend_font_size: 15
+  });
 
   // LeftView 
   // -------------------
@@ -1891,11 +1891,11 @@
       var tilted_label_margin_top = 2;
       var y = this.chart.canvas.bottom.offset.y + this.chart.axes_font_size;
       var x = position + this.chart.canvas.bottom.offset.x;
-      if (this.chart.canvas.bottom.label.is_tilted) {
+      if (this.chart.canvas.bottom.label.tilt > 0) {
         this.$el.attr({
           x: x,
           y: y + tilted_label_margin_top,
-          transform: 'rotate(45 ' + x + ',' + y + ')'
+          transform: 'rotate(' + this.chart.canvas.bottom.label.tilt + ' ' + x + ',' + y + ')'
         });
       } else {
         this.$el.attr({
@@ -1940,7 +1940,7 @@
 
     initialize: function () {
       this.render();
-      this.listenTo(this.model, 'render', this.render)
+      this.listenTo(this.model, 'populate_data_views', this.render)
     },
 
     render: function () {
@@ -2177,6 +2177,11 @@
     tagName: 'ul',
     className: 'tooltip list',
 
+    events: {
+      'mousemove': 'triggerMousemove',
+      'mouseleave': 'triggerMouseleave'
+    },
+
     initialize: function () {
       this.chart = this.collection.chart;
       this.listenTo(this.collection, 'add', this.renderTootltipItem);
@@ -2241,7 +2246,24 @@
 
     checkTooltip: function (model) {
       if (this.collection.length == 0) this.collection.$container.hide();
-    }
+    },
+
+    // mousemove events are proxied to the chart when mouse is over tooltip
+    triggerMousemove: function (event) {
+      var offset = this.chart.$el.offset();
+      this.chart.trigger('mousemove', {
+        x: event.pageX - offset.left,
+        y: event.pageY - offset.top
+      });
+    },
+
+    // mouse
+    triggerMouseleave: function (event) {
+      var currentEl = event.toElement || event.relatedTarget;
+      if (!this.chart.$el.is(currentEl) && !$.contains(this.chart.$el[0], currentEl)) {
+        this.chart.trigger('mouseleave');
+      }
+    },
 
   });
 
@@ -2275,8 +2297,8 @@
 
       var tooltip_item = $('<div>', { class: 'tooltip item-text' });
       var text = this.model.get('y');
-      if (this.model.get('meta')) {
-        text = this.model.get('meta') + ': ' + text;
+      if (this.model.get('tooltip')) {
+        text = this.model.get('tooltip') + ': ' + text;
       }
 
       tooltip_item.html(text);
@@ -2312,10 +2334,10 @@
 
     initialize: function () {
       this.is_collapsed = true;
-      this.listenTo(O_o, 'render', this._applyCss);
-      this.listenTo(O_o, 'shrink', this._releaseWidth);
+      this.listenTo(O_o, 'render', this.applyCss);
+      this.listenTo(O_o, 'shrink', this.releaseWidth);
       this.listenTo(this.model, 'render_legend', this.render);
-      this._createToggleIcon();
+      this.createToggleIcon();
       this.render();
     },
 
@@ -2340,7 +2362,7 @@
 
       $('body').append($temp_div);
       this.max_legend_item_width = $temp_div.width();
-      this._setItemWidth();
+      this.setItemWidth();
       $temp_div.remove();
 
       this.$el.css({
@@ -2353,22 +2375,22 @@
 
     toggle: function () {
       this.is_collapsed = !this.is_collapsed;
-      this._applyCss();
+      this.applyCss();
     },
 
-    _isOverflowing: function () {
+    isOverflowing: function () {
       var $li = this.$el.find('li');
       this.legend_item_outer_height = $li.outerHeight(true);
       this.$el.css({ height: 'auto' });
       return (this.$el.height() > this.legend_item_outer_height);
     },
 
-    _applyCss: function () {
-      this._setItemWidth();
+    applyCss: function () {
+      this.setItemWidth();
       // for aesthetic reasons, set the width so lengend only resizes along with the chart
       this.$el.outerWidth(this.model.width);
 
-      if (!this._isOverflowing()) {
+      if (!this.isOverflowing()) {
         if (this.$toggle_icon) {
           this.$toggle_icon.hide();
         }
@@ -2391,7 +2413,7 @@
       }
     },
 
-    _setItemWidth: function () {
+    setItemWidth: function () {
       if (this.model.$chart_container.width() > 2 * this.max_legend_item_width) {
         this.$el.find('li').width(this.max_legend_item_width + 2).css({ display: 'inline-block' });; // + 2 for possible rendering inaccuracy
       } else {
@@ -2399,7 +2421,7 @@
       }
     },
 
-    _createToggleIcon: function () {
+    createToggleIcon: function () {
       this.$toggle_icon = $('<div>', { class: 'toggle-icon' }).css({
         position: 'absolute',
         top: 0,
@@ -2422,7 +2444,7 @@
       this.$el.append(this.$toggle_icon);
     },
 
-    _releaseWidth: function () {
+    releaseWidth: function () {
       this.$el.width('auto');
     }
 
