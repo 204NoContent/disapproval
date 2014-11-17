@@ -1218,6 +1218,12 @@
         return { x_min: lower_bound - step * 3 / 4, x_max: upper_bound + step * 3 / 4, x_step: step };
       }
 
+      if (_.isEmpty(this.labels)){
+        throw new Error('Labels must exist and none were found.');
+      } else if (x_min < this.labels[0].x || this.data_range.x_max > _.last(this.labels).x) {
+        throw new Error('x-values of labels must span the x-range of the data. If you don\'t want text, set the text of the labels to empty strings.');
+      }
+
       var label_min = _.max(_.filter(this.labels, function (label) { return label.x <= x_min; }, this), function (label) { return label.x });
       var label_max = _.min(_.filter(this.labels, function (label) { return label.x >= this.data_range.x_max; }, this), function (label) { return label.x });
 
