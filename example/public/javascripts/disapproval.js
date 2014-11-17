@@ -1022,8 +1022,8 @@
   ];
 
   var globalOptions = {
-    alignLeftAxes: false,
-    alignRightPoint: false
+    leftAxesAreAligned: false,
+    rightPointsAreAligned: false
   };
 
   O_o.setGlobalOptions = function (options) {
@@ -1084,52 +1084,22 @@
     this._ensureElement();
     this._attachToContainer();
     this._reset();
-    this.initialize.apply(this, arguments);
-    this.listenTo(O_o, 'shrink', this._shrink);
-    this.listenTo(O_o, 'grow', this._grow);
-    this.listenTo(O_o, 'set_size', this._setSize);
-    this.listenTo(O_o, 'calculate_label_dimensions', this._calculateLabelDimensions);
-    this.listenTo(O_o, 'set_canvas', this._setCanvas);
-    this.listenTo(O_o, 'calculate_axes', this._calculateAxes);
-    this.listenTo(O_o, 'set_axes', this._setAxes);
-    this.listenTo(O_o, 'set_point_thresholds', this._setPointThresholds);
     if (data) this._setup(data, _.extend({ silent: true }, options));
+    this.initialize.apply(this, arguments);
     this.delegateEvents();
-    this.renderLegend();
-
-    window.setTimeout($.proxy(function () {
-      // only trigger these global events once
-      if (all_charts.indexOf(this) == 0) {
-        O_o.trigger('shrink');
-        O_o.trigger('grow');
-        O_o.trigger('set_size');
-        O_o.trigger('calculate_label_dimensions'); // best guess at size
-        O_o.trigger('set_canvas');
-        O_o.trigger('calculate_axes');
-        O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
-        O_o.trigger('set_canvas');
-        O_o.trigger('set_axes');
-        O_o.trigger('set_point_thresholds');
-      }
-      // setup views after sizing has been globally determined
-      this.createChartViews();
-    }, this), 0);
-
   };
 
   // List of chart options to be merged as properties.
   var chartOptions = [
     'container', 'el', 'id', 'attributes', 'className', 'tagName', 'events',
-    'type', 'aspect_ratio', 'stepsToExtendYAxis', 'stepsToExtendXAxis',
-    'grid_stroke_color', 'grid_stroke_width',
-    'grid_show_lines', 'axes_stroke_color', 'axes_stroke_width',
-    'axes_font_family', 'axes_font_size', 'axes_font_color',
-    'x_axis_lower_bound_zero', 'y_axis_lower_bound_zero', 'point_radius',
-    'point_stroke_width', 'line_stroke_width', 'bar_stroke_width',
-    'bar_spacing', 'tooltip_offset', 'tooltip_font_family',
-    'tooltip_font_color', 'tooltip_font_size', 'tooltip_font_weight',
-    'tooltip_letter_spacing', 'legend_font_family', 'legend_font_color',
-    'legend_font_size'
+    'type', 'aspectRatio', 'stepsToExtendYAxis', 'stepsToExtendXAxis',
+    'gridStrokeColor', 'gridStrokeWidth', 'gridShowLines', 'axesStrokeColor',
+    'axesStrokeWidth', 'axesFontFamily', 'axesFontSize', 'axesFontColor',
+    'xAxisLowerBoundIsZero', 'yAxisLowerBoundIsZero', 'pointRadius',
+    'pointStrokeWidth', 'lineStrokeWidth', 'barStrokeWidth', 'barSpacing',
+    'tooltipOffset', 'tooltipFontFamily', 'tooltipFontColor', 'tooltipFontSize',
+    'tooltipFontWeight', 'tooltipLetterSpacing', 'legendFontFamily',
+    'legendFontColor', 'legendFontSize'
   ];
 
   _.extend(Chart.prototype, View.prototype, {
@@ -1139,8 +1109,6 @@
       'mouseleave': '_triggerMouseleave'
     },
 
-    // _ensureElement
-    // _attachToContainer
     _attachToContainer: function () {
       if (_.isUndefined(this.container)) {
         throw new Error('No container assigened. A O_o.Chart must specify a container. Example: new O_o.Chart(data, { container: \'#chart-container\' });');
@@ -1154,7 +1122,6 @@
       this.$container.append(this.$chart_container.append(this.$el));
     },
 
-    // _reset
     _reset: function () {
       if (this.datasets) _.each(this.datasets, function (dataset) {
         dataset.set([]); // TODO: fix this hack, see PointView
@@ -1176,10 +1143,6 @@
       }
     },
 
-    // initialize
-    initialize: function () {},
-
-    // _setup
     _setup: function (data, options) {
       options || (options = {});
       this._reset();
@@ -1200,7 +1163,7 @@
         return dataset_collection;
       }, this);
       if (this.cached_type == 'bar') this.type = 'bar';
-      if (this.cached_y_axis_lower_bound_zero == false) this.y_axis_lower_bound_zero = false;
+      if (this.cached_yAxisLowerBoundIsZero == false) this.yAxisLowerBoundIsZero = false;
       if (this.type == 'bar') {
         if (this.datasets.length > 1) {
           // bar charts are for one dataset only
@@ -1208,8 +1171,8 @@
           this.type = 'line';
         } else {
           // bar charts should begin at y = 0
-          this.cached_y_axis_lower_bound_zero = this.y_axis_lower_bound_zero;
-          this.y_axis_lower_bound_zero = true;
+          this.cached_yAxisLowerBoundIsZero = this.yAxisLowerBoundIsZero;
+          this.yAxisLowerBoundIsZero = true;
         }
       }
       this._setBounds();
@@ -1241,7 +1204,7 @@
       var step;
 
       var x_min = this.data_range.x_min;
-      if (x_min > 0 && this.x_axis_lower_bound_zero) x_min = 0;
+      if (x_min > 0 && this.xAxisLowerBoundIsZero) x_min = 0;
 
       if (this.type == 'bar') {
         lower_bound = x_min;
@@ -1276,7 +1239,7 @@
         lower_bound = label_min.x;
       }
 
-      if (globalOptions.alignRightPoint) {
+      if (globalOptions.rightPointsAreAligned) {
         // NOTE: This approach only works if the left axes are also aligned
         // otherwise the right points will be off by 4% of the difference
         // of the label widths.
@@ -1299,7 +1262,7 @@
 
     _naturalBoundsY: function () {
       var y_min = this.data_range.y_min;
-      if (y_min > 0 && this.y_axis_lower_bound_zero) y_min = 0;
+      if (y_min > 0 && this.yAxisLowerBoundIsZero) y_min = 0;
 
       var range = this.data_range.y_max - y_min;
 
@@ -1325,21 +1288,47 @@
       return { y_min: lower_bound, y_max: upper_bound, y_step: step };
     },
 
-    // _shrink
+    initialize: function () {
+      this.listenTo(O_o, 'shrink', this._shrink);
+      this.listenTo(O_o, 'grow', this._grow);
+      this.listenTo(O_o, 'set_size', this._setSize);
+      this.listenTo(O_o, 'calculate_label_dimensions', this._calculateLabelDimensions);
+      this.listenTo(O_o, 'set_canvas', this._setCanvas);
+      this.listenTo(O_o, 'calculate_axes', this._calculateAxes);
+      this.listenTo(O_o, 'set_axes', this._setAxes);
+      this.listenTo(O_o, 'set_point_thresholds', this._setPointThresholds);
+      this._renderLegend();
+      window.setTimeout($.proxy(function () {
+        // only trigger these global events once
+        if (all_charts.indexOf(this) == 0) {
+          O_o.trigger('shrink');
+          O_o.trigger('grow');
+          O_o.trigger('set_size');
+          O_o.trigger('calculate_label_dimensions'); // best guess at size
+          O_o.trigger('set_canvas');
+          O_o.trigger('calculate_axes');
+          O_o.trigger('calculate_label_dimensions'); // reset after y-axis is known
+          O_o.trigger('set_canvas');
+          O_o.trigger('set_axes');
+          O_o.trigger('set_point_thresholds');
+        }
+        // setup views after sizing has been globally determined
+        this._createChartViews();
+      }, this), 0);
+    },
+
     _shrink: function () {
       this.$el.attr({ width: 0, height: 0 });
     },
 
-    // _grow
     _grow: function () {
       // set best guess at height of container
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
     },
 
-    // _setSize
     _setSize: function () {
       // reset height with updated width from the potential addition of a scrollbar
-      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspect_ratio));
+      this.$chart_container.height(Math.round(this.$chart_container.width() / this.aspectRatio));
       // grab accurate dimensions
       this.width = this.$chart_container.width();
       this.height = this.$chart_container.height();
@@ -1349,7 +1338,6 @@
       });
     },
 
-    // _calculateLabelDimensions
     _calculateLabelDimensions: function() {
       this._calculateXLabels();
       this._calculateYLabels();
@@ -1358,15 +1346,15 @@
     _calculateXLabels: function () {
       this.canvas.bottom.label = {
         width: 0,
-        height: this.axes_font_size
+        height: this.axesFontSize
       };
 
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
       $('body').append(temp_svg);
       _.each(this.labels, function (label) {
         label = svg$el('text').html(label.label).attr({
-          'font-family': this.axes_font_family,
-          'font-size': this.axes_font_size
+          'font-family': this.axesFontFamily,
+          'font-size': this.axesFontSize
         });
         temp_svg.append(label);
         var width = label.width();
@@ -1394,20 +1382,19 @@
 
       // create svg text element and to append it to the DOM in order to get width
       var label = svg$el('text').html(label_text).attr({
-        'font-family': this.axes_font_family,
-        'font-size': this.axes_font_size
+        'font-family': this.axesFontFamily,
+        'font-size': this.axesFontSize
       });
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
       $('body').append(temp_svg);
       temp_svg.append(label);
       this.canvas.left.label = {
         width: label.width(),
-        height: this.axes_font_size
+        height: this.axesFontSize
       }
       temp_svg.remove();
     },
 
-    // _setCanvas
     _setCanvas: function () {
       var padding = 10;
       var width = this.canvas.left.label.width + padding;
@@ -1435,7 +1422,6 @@
       };
     },
 
-    // _calculateAxes
     _calculateAxes: function () {
       var padding = 5;
 
@@ -1481,9 +1467,8 @@
       this.x_axis.new_values = labels;
     },
 
-    // _setAxes
     _setAxes: function () {
-      if (globalOptions.alignLeftAxes) {
+      if (globalOptions.leftAxesAreAligned) {
         var max_left_label_width = _.max(_.map(all_charts, function (chart) {
           return chart.canvas.left.label.width;
         }));
@@ -1495,7 +1480,6 @@
       this.x_axis.set(this.x_axis.new_values);
     },
 
-    // _setPointThresholds
     _setPointThresholds: function () {
       _.each(this.datasets, function (dataset) {
         dataset.each(function (point, i) {
@@ -1514,6 +1498,28 @@
           }
         }, this);
       }, this);
+    },
+
+    _renderLegend: function () {
+      this.legendView = new LegendView({ model: this });
+      if (this.datasets.length == 1) this.legendView.$el.hide();
+      this.$container.append(this.legendView.$el);
+      this.legendView.applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
+    },
+
+    _createChartViews: function () {
+      this.$el.append(new LeftView({ model: this }).$el);
+      this.$el.append(new BottomView({ model: this }).$el);
+      this.$el.append(new MainView({ model: this }).$el);
+      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
+        position: 'absolute',
+        'border-radius': 3,
+        'background-color': 'rgba(0,0,0,0.8)',
+        '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        '-moz-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
+        'box-shadow': '0px 1px 2px rgba(0,0,0,0.2)'
+      }).hide();
+      $('body').append(this.tooltipCollection.$container.append(new TooltipView({ collection: this.tooltipCollection }).$el));
     },
 
     _triggerMousemove: function (event) {
@@ -1536,13 +1542,14 @@
       if (!$(currentEl).hasClass('tooltip')) this.trigger('mouseleave');
     },
 
+    // public methods
+
     // also remove this from the collection of all charts when a chart is removed
     remove: function () {
       all_charts = _.without(all_charts, this);
       O_o.View.prototype.remove.call(this);
     },
 
-    // public methods
     reset: function (data, options) {
       this._setup(data, options);
 
@@ -1571,28 +1578,6 @@
       return this;
     },
 
-    renderLegend: function () {
-      this.legendView = new LegendView({ model: this });
-      if (this.datasets.length == 1) this.legendView.$el.hide();
-      this.$container.append(this.legendView.$el);
-      this.legendView.applyCss(); // The view needs to be appended before determining overflow.  TODO: clean this up.
-    },
-
-    createChartViews: function () {
-      this.$el.append(new LeftView({ model: this }).$el);
-      this.$el.append(new BottomView({ model: this }).$el);
-      this.$el.append(new MainView({ model: this }).$el);
-      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
-        position: 'absolute',
-        'border-radius': 3,
-        'background-color': 'rgba(0,0,0,0.8)',
-        '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
-        '-moz-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
-        'box-shadow': '0px 1px 2px rgba(0,0,0,0.2)'
-      }).hide();
-      $('body').append(this.tooltipCollection.$container.append(new TooltipView({ collection: this.tooltipCollection }).$el));
-    },
-
     xScale: function (x) {
       return this.xConversion(x - this.bounds.x_min);
     },
@@ -1611,41 +1596,41 @@
 
     type: 'bar',
 
-    aspect_ratio: 16 / 9,
+    aspectRatio: 16 / 9,
 
     stepsToExtendYAxis: 0.95,
     stepsToExtendXAxis: 0.95,
 
-    grid_stroke_color: "rgba(0,0,0,0.06)",
-    grid_stroke_width: 1,
-    grid_show_lines: true,
+    gridStrokeColor: "rgba(0,0,0,0.06)",
+    gridStrokeWidth: 1,
+    gridShowLines: true,
 
-    axes_stroke_color: "rgba(0,0,0,0.15)",
-    axes_stroke_width: 1,
-    axes_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    axes_font_size: 12,
-    axes_font_color: "rgba(0,0,0,0.7)",
-    x_axis_lower_bound_zero: false,
-    y_axis_lower_bound_zero: false,
+    axesStrokeColor: "rgba(0,0,0,0.15)",
+    axesStrokeWidth: 1,
+    axesFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    axesFontSize: 12,
+    axesFontColor: "rgba(0,0,0,0.7)",
+    xAxisLowerBoundIsZero: false,
+    yAxisLowerBoundIsZero: false,
 
-    point_radius: 3.8,
-    point_stroke_width: 1.2,
+    pointRadius: 3.8,
+    pointStrokeWidth: 1.2,
 
-    line_stroke_width: 2,
+    lineStrokeWidth: 2,
 
-    bar_stroke_width: 2,
-    bar_spacing: 0.1,
+    barStrokeWidth: 2,
+    barSpacing: 0.1,
 
-    tooltip_offset: 10,
-    tooltip_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    tooltip_font_color: "rgba(255,255,255,1)",
-    tooltip_font_size: 15,
-    tooltip_font_weight: 'lighter',
-    tooltip_letter_spacing: 1.8,
+    tooltipOffset: 10,
+    tooltipFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    tooltipFontColor: "rgba(255,255,255,1)",
+    tooltipFontSize: 15,
+    tooltipFontWeight: 'lighter',
+    tooltipLetterSpacing: 1.8,
 
-    legend_font_family: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
-    legend_font_color: "rgba(0,0,0,0.7)",
-    legend_font_size: 15
+    legendFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    legendFontColor: "rgba(0,0,0,0.7)",
+    legendFontSize: 15
   });
 
   // LeftView 
@@ -1675,7 +1660,7 @@
     renderYTick: function (model) {
       this.$el.append(new YTickView({ model: model }).$el);
       this.$el.append(new YLabelView({ model: model }).$el);
-      if (this.model.grid_show_lines) {
+      if (this.model.gridShowLines) {
         if (model.get('y') != this.model.bounds.y_min) {
           this.$el.append(new YGridView({ model: model }).$el);
         }
@@ -1698,8 +1683,8 @@
         x2: this.chart.canvas.left.width,
         y1: this.chart.canvas.left.offset.y,
         y2: this.chart.canvas.left.offset.y + this.chart.canvas.left.height,
-        stroke: this.chart.axes_stroke_color,
-        'stroke-width': this.chart.axes_stroke_width,
+        stroke: this.chart.axesStrokeColor,
+        'stroke-width': this.chart.axesStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -1723,8 +1708,8 @@
         x2: this.chart.canvas.left.width,
         y1: position,
         y2: position,
-        stroke: this.chart.axes_stroke_color,
-        'stroke-width': this.chart.axes_stroke_width,
+        stroke: this.chart.axesStrokeColor,
+        'stroke-width': this.chart.axesStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -1744,9 +1729,9 @@
 
       this.$el.html(this.model.get('label'));
       this.$el.attr({
-        fill: this.chart.axes_font_color,
-        'font-family': this.chart.axes_font_family,
-        'font-size': this.chart.axes_font_size
+        fill: this.chart.axesFontColor,
+        'font-family': this.chart.axesFontFamily,
+        'font-size': this.chart.axesFontSize
       });
 
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
@@ -1758,7 +1743,7 @@
       var label_margin_right = 10;
       this.$el.attr({
         x: this.chart.canvas.left.width - width - label_margin_right,
-        y: position + this.chart.axes_font_size / 2 - 1 // Don't know why we need a 1 here, maybe lineheight of tick
+        y: position + this.chart.axesFontSize / 2 - 1 // Don't know why we need a 1 here, maybe lineheight of tick
       });
 
     }
@@ -1780,8 +1765,8 @@
         x2: this.chart.canvas.main.offset.x + this.chart.canvas.main.width,
         y1: position,
         y2: position,
-        stroke: this.chart.grid_stroke_color,
-        'stroke-width': this.chart.grid_stroke_width,
+        stroke: this.chart.gridStrokeColor,
+        'stroke-width': this.chart.gridStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -1807,7 +1792,7 @@
         this.$el.append(new XTickView({ model: model }).$el);
       }
       this.$el.append(new XLabelView({ model: model }).$el);
-      if (this.model.grid_show_lines) {
+      if (this.model.gridShowLines) {
         if (model.get('x') != this.model.bounds.x_min) {
           this.$el.append(new XGridView({ model: model }).$el);
         }
@@ -1831,8 +1816,8 @@
         x2: this.chart.canvas.bottom.offset.x + this.chart.canvas.bottom.width,
         y1: this.chart.canvas.bottom.offset.y,
         y2: this.chart.canvas.bottom.offset.y,
-        stroke: this.chart.axes_stroke_color,
-        'stroke-width': this.chart.axes_stroke_width,
+        stroke: this.chart.axesStrokeColor,
+        'stroke-width': this.chart.axesStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -1855,8 +1840,8 @@
         x2: position + this.chart.canvas.bottom.offset.x,
         y1: this.chart.canvas.bottom.offset.y + tick_width,
         y2: this.chart.canvas.bottom.offset.y,
-        stroke: this.chart.axes_stroke_color,
-        'stroke-width': this.chart.axes_stroke_width,
+        stroke: this.chart.axesStrokeColor,
+        'stroke-width': this.chart.axesStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -1876,9 +1861,9 @@
 
       this.$el.html(this.model.get('label'));
       this.$el.attr({
-        fill: this.chart.axes_font_color,
-        'font-family': this.chart.axes_font_family,
-        'font-size': this.chart.axes_font_size
+        fill: this.chart.axesFontColor,
+        'font-family': this.chart.axesFontFamily,
+        'font-size': this.chart.axesFontSize
       });
 
       var temp_svg = svg$el('svg').css('visibility', 'hidden');
@@ -1889,7 +1874,7 @@
 
       var label_margin_top = 8;
       var tilted_label_margin_top = 2;
-      var y = this.chart.canvas.bottom.offset.y + this.chart.axes_font_size;
+      var y = this.chart.canvas.bottom.offset.y + this.chart.axesFontSize;
       var x = position + this.chart.canvas.bottom.offset.x;
       if (this.chart.canvas.bottom.label.tilt > 0) {
         this.$el.attr({
@@ -1922,8 +1907,8 @@
         x2: position + this.chart.canvas.main.offset.x,
         y1: this.chart.canvas.main.offset.y + this.chart.canvas.main.height,
         y2: this.chart.canvas.main.offset.y,
-        stroke: this.chart.grid_stroke_color,
-        'stroke-width': this.chart.grid_stroke_width,
+        stroke: this.chart.gridStrokeColor,
+        'stroke-width': this.chart.gridStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
     }
@@ -2001,7 +1986,7 @@
         points: points,
         stroke: this.collection.color.lineStrokeColor,
         fill: 'transparent',
-        'stroke-width': this.chart.line_stroke_width
+        'stroke-width': this.chart.lineStrokeWidth
       });
     }
   });
@@ -2036,8 +2021,8 @@
       this.$el.attr({
         cx: x,
         cy: y,
-        r: this.chart.point_radius,
-        'stroke-width': this.chart.point_stroke_width
+        r: this.chart.pointRadius,
+        'stroke-width': this.chart.pointStrokeWidth
       });
       this.style();
     },
@@ -2105,7 +2090,7 @@
     },
 
     render: function () {
-      var width = this.chart.xConversion(this.chart.bounds.x_step) * (1 - this.chart.bar_spacing) - this.chart.bar_stroke_width;
+      var width = this.chart.xConversion(this.chart.bounds.x_step) * (1 - this.chart.barSpacing) - this.chart.barStrokeWidth;
       var height = this.chart.yConversion(this.model.get('y'));
       var x = this.chart.xScale(this.model.get('x')) + this.chart.canvas.main.offset.x - width / 2;
       var y = this.chart.yScale(this.model.get('y')) + this.chart.canvas.main.offset.y;
@@ -2121,7 +2106,7 @@
         y: y,
         width: width,
         height: height,
-        'stroke-width': this.chart.bar_stroke_width,
+        'stroke-width': this.chart.barStrokeWidth,
         'shape-rendering': 'crispEdges'
       });
       this.style();
@@ -2218,9 +2203,9 @@
         }
 
         if (this.collection.side == 'left') {
-          this.collection.max_width = x_min - 2 * this.chart.tooltip_offset;
+          this.collection.max_width = x_min - 2 * this.chart.tooltipOffset;
         } else {
-          this.collection.max_width = this.chart.canvas.main.width - x_max - 2 * this.chart.tooltip_offset;
+          this.collection.max_width = this.chart.canvas.main.width - x_max - 2 * this.chart.tooltipOffset;
         }
 
         this.collection.$container.css('max-width', this.collection.max_width);
@@ -2233,19 +2218,25 @@
 
         if (this.collection.side == 'left') {
           this.collection.$container.offset({
-            left: offset.left + this.chart.canvas.left.width + x_min - this.collection.$container.width() - this.chart.tooltip_offset
+            left: offset.left + this.chart.canvas.left.width + x_min - this.collection.$container.width() - this.chart.tooltipOffset
           });
         } else {
           this.collection.$container.offset({
-            left: offset.left + this.chart.canvas.left.width + x_max + this.chart.tooltip_offset
+            left: offset.left + this.chart.canvas.left.width + x_max + this.chart.tooltipOffset
           })
         }
       }
 
-    }, 10),
+    }, 5),
 
     checkTooltip: function (model) {
-      if (this.collection.length == 0) this.collection.$container.hide();
+      if (this.collection.length == 0) {
+        // Prevent tooltip from dissapearing unnecessarily
+        // since remove event is triggered before add
+        window.setTimeout($.proxy(function () {
+          if (this.collection.length == 0) this.collection.$container.hide();
+        }, this), 0);
+      }
     },
 
     // mousemove events are proxied to the chart when mouse is over tooltip
@@ -2305,11 +2296,11 @@
 
       tooltip_item.css({
         'margin-left': 20,
-        'color': this.chart.tooltip_font_color,
-        'font-family': this.chart.tooltip_font_family,
-        'font-size': this.chart.tooltip_font_size,
-        'font-weight': this.chart.tooltip_font_weight,
-        'letter-spacing': this.chart.tooltip_letter_spacing,
+        'color': this.chart.tooltipFontColor,
+        'font-family': this.chart.tooltipFontFamily,
+        'font-size': this.chart.tooltipFontSize,
+        'font-weight': this.chart.tooltipFontWeight,
+        'letter-spacing': this.chart.tooltipLetterSpacing,
         'word-wrap': 'break-word',
         'cursor': 'default'
       });
@@ -2432,7 +2423,7 @@
         height: 20,
         'font-size': 20,
         'text-align': 'center',
-        'font-family': this.model.legend_font_family,
+        'font-family': this.model.legendFontFamily,
         cursor: 'pointer',
         '-webkit-touch-callout': 'none',
         '-webkit-user-select': 'none',
@@ -2483,9 +2474,9 @@
 
       this.$legend_text.css({
         'margin-left': 20,
-        'color': this.chart.legend_font_color,
-        'font-family': this.chart.legend_font_family,
-        'font-size': this.chart.legend_font_size,
+        'color': this.chart.legendFontColor,
+        'font-family': this.chart.legendFontFamily,
+        'font-size': this.chart.legendFontSize,
         cursor: 'default'
       });
 
