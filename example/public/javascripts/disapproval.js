@@ -1206,7 +1206,7 @@
       var x_min = this.data_range.x_min;
       if (x_min > 0 && this.xAxisLowerBoundIsZero) x_min = 0;
 
-      if (this.type == 'bar') {
+      if (this.type == 'bar' || _.isEmpty(this.labels)) {
         lower_bound = x_min;
         upper_bound = this.data_range.x_max;
         total_steps = this.datasets[0].length - 1;
@@ -1218,10 +1218,8 @@
         return { x_min: lower_bound - step * 3 / 4, x_max: upper_bound + step * 3 / 4, x_step: step };
       }
 
-      if (_.isEmpty(this.labels)){
-        throw new Error('Labels must exist and none were found.');
-      } else if (x_min < this.labels[0].x || this.data_range.x_max > _.last(this.labels).x) {
-        throw new Error('x-values of labels must span the x-range of the data. If you don\'t want text, set the text of the labels to empty strings.');
+      if (x_min < this.labels[0].x || this.data_range.x_max > _.last(this.labels).x) {
+          throw new Error('x-values of labels must span the x-range of the data.');
       }
 
       var label_min = _.max(_.filter(this.labels, function (label) { return label.x <= x_min; }, this), function (label) { return label.x });
