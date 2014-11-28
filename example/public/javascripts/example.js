@@ -1,134 +1,70 @@
 $(document).ready(function () {
-  // fake some data
-  // var data = {
-    // labels: _.map(_.range(0, 11), function (i) {
-    //   return {
-    //     x: i,
-    //     label: 'x label: ' + i
-    //   };
-    // }),
-  //   datasets: _.map(_.range(1, 11), function (i) {
-  //     if (i == 0) {
-  //       return {
-  //         name: 'Dataset ' + i,
-  //         x: _.range(0, 10 + 1),
-  //         y: _.map(_.range(0, 10 + 1), function () { return 0; }),
-  //         tooltip: _.map(_.range(0, 10 + 1), function () {
-  //           return 'Line ' + i;
-  //         })
-  //       };
-  //     } else {
-  //       return {
-  //         name: 'Dataset ' + i,
-  //         x: _.range(0, 10 + 1),
-  //         y: _.range(0, 10 * (i + 1) + 10, i),
-  //         tooltip: _.map(_.range(0, 10 * (i + 1) + 10, i), function () {
-  //           return 'Line ' + i;
-  //         })
-  //       };
-  //     }
-  //   })
-  // };
-
-  // var random_dataset = {
-  //   labels: _.map(_.range(-30, 30 + 1), function (i) {
-  //     return {
-  //       x: i,
-  //       label: 'x label: ' + i
-  //     };
-  //   }),
-  //   datasets: [{
-  //     name: 'Dataset 1',
-  //     x: _.map(_.range(1, 10 + 1), function (i) { return -5 + i + Math.random(); }),
-  //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random() - 1.5; }),
-  //     tooltip: []
-  //   }, {
-  //     name: 'Dataset 2',
-  //     x: _.map(_.range(1, 10 + 1), function (i) { return i + Math.random(); }),
-  //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-  //     tooltip: []
-  //   }, {
-  //     name: 'Dataset 3',
-  //     x: _.map(_.range(1, 10 + 1), function (i) { return -2 + i + Math.random(); }),
-  //     y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-  //     tooltip: []
-  //   }]
-  // }
-
-  var single_dataset_data = {
-    labels: _.map(_.range(0, 12 + 1), function (i) {
-      return {
-        x: i,
-        label: 'x label: ' + i
-      };
-    }),
+  // fake data for a single dataset
+  var data = {
+    labels: [
+       { x: 0,  label: 'Feb 2013'  },
+       { x: 1,  label: 'Mar 2013'  },
+       { x: 2,  label: 'Apr 2013'  },
+       { x: 3,  label: 'May 2013'  },
+       { x: 4,  label: 'Jun 2013'  },
+       { x: 5,  label: 'Jul 2013'  },
+       { x: 6,  label: 'Aug 2013'  },
+       { x: 7,  label: 'Sept 2013' },
+       { x: 8,  label: 'Oct 2013'  },
+       { x: 9,  label: 'Nov 2013'  },
+       { x: 10, label: 'Dec 2013'  },
+       { x: 11, label: 'Jan 2014'  },
+       { x: 12, label: 'Feb 2014'  },
+       { x: 13, label: 'Mar 2014'  },
+       { x: 14, label: 'Apr 2014'  },
+       { x: 15, label: 'May 2014'  },
+       { x: 16, label: 'Jun 2014'  },
+       { x: 17, label: 'Jul 2014'  }
+    ],
     datasets: [{
       name: 'Single Dataset',
-      x: _.range(1, 10 + 1),
-      y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-      tooltip: []
+      x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      y: [320, 9213, 3523, 346, 332, 358, 1045, 493, 989, 542, 853, 465, 1023, 2132, 3612, 5493],
+      tooltip: ['Demo Day', 'TechCrunch Bump', 'Wearing off of Novelty', 'Trough of Sorrow', 'Trough of Sorrow', 'Trough of Sorrow', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Product Market Fit', 'Growth', 'Growth', 'Growth']
     }]
   }
 
-  O_o.setGlobalOptions({ alignRightPoint: true, alignLeftAxes: true })
+  // set global options so that the all left axes are aligned
+  O_o.setGlobalOptions({ leftAxesAreAligned: true })
 
-  $('<div>', { id: 'chart-container' }).css('margin-bottom', 40).appendTo('body');
-  // make a new chart
-  var chart = new O_o.Chart(single_dataset_data, {
-    container: '#chart-container',
+  // make a default chart
+  var chart  = new O_o.Chart(data, { container: '#chart-container' });
+
+  // line chart of the same data
+  var chart2 = new O_o.Chart(data, {
+    container: '#chart-container-2',
     type: 'line',
-    x_axis_lower_bound_zero: true,
-    y_axis_lower_bound_zero: true
+    xAxisLowerBoundIsZero: true,
+    yAxisLowerBoundIsZero: true
   });
 
-  resetChart = function () {
-    single_dataset_data = {
-      labels: _.map(_.range(0, 12 + 1), function (i) {
-        return {
-          x: i,
-          label: 'x label: ' + i
-        };
-      }),
-      datasets: [{
-        name: 'Single Dataset',
-        x: _.range(1, 10 + 1),
-        y: _.map(_.range(0, 9 + 1), function () { return 3 * Math.random(); }),
-        tooltip: []
-      }]
-    }
-    chart.reset(single_dataset_data)
-  }
-
-  var data2 = {
-    labels: _.map(_.range(-1, 32), function (i) {
+  // fake data for multiple datasets
+  var otherData = {
+    labels: _.map(_.range(-1, 22), function (i) {
       return {
         x: i,
         label: 'x label that is very long: ' + i
       };
     }),
-    datasets: _.map(_.range(1, 31), function (i) {
-      if (i == 0) {
-        return {
-          name: 'Dataset that has a very long name: ' + i,
-          x: _.range(0, 30 + 1),
-          y: _.map(_.range(0, 30 + 1), function () { return 0; }),
-          tooltip: _.map(_.range(0, 30 + 1), function () {
-            return 'Line that has a ridiculously long name and really should be shortened don\'t you think ' + i;
-          })
-        };
-      } else {
-        return {
-          name: 'Dataset that has a very long name: ' + i,
-          x: _.range(0, 30 + 1),
-          y: _.range(0, 30 * (i + 1) + 30, i),
-          tooltip: _.map(_.range(0, 30 * (i + 1) + 30, i), function () {
-            return 'Line that has a ridiculously long name and really should be shortened don\'t you think ' + i;
-          })
-        };
-      }
+    datasets: _.map(_.range(1, 21), function (i) {
+      return {
+        name: 'Dataset with a long name and slope of ' + i,
+        x: _.range(1, 21),
+        y: _.range(1, 20 * (i + 1), i),
+        tooltip: _.map(_.range(1, 20 * (i + 1), i), function () {
+          return 'Line that has a ridiculously long tooltip and really should be shortened with slope of ' + i;
+        })
+      };
     })
   };
 
-  $('<div>', { id: 'chart-container-2' }).css('margin-bottom', 40).appendTo('body');
-  var chart2 = new O_o.Chart(data2, { container: '#chart-container-2' });
+  var chart3 = new O_o.Chart(otherData, {
+    container: '#chart-container-3'
+  });
+
 });

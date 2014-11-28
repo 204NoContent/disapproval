@@ -1001,24 +1001,24 @@
   var color_palette_20 = [
     '151,187,205',
     '31,119,180',
-    '255,127,14',
     '255,187,120',
-    '44,160,44',
+    '255,127,14',
     '152,223,138',
-    '214,39,40',
+    '44,160,44',
     '255,152,150',
-    '148,103,189',
+    '214,39,40',
     '197,176,213',
-    '140,86,75',
+    '148,103,189',
     '196,156,148',
-    '227,119,194',
+    '140,86,75',
     '247,182,210',
-    '127,127,127',
+    '227,119,194',
     '199,199,199',
-    '188,189,34',
+    '127,127,127',
     '219,219,141',
-    '23,190,207',
-    '158,218,229'
+    '188,189,34',
+    '158,218,229',
+    '23,190,207'
   ];
 
   var globalOptions = {
@@ -1598,42 +1598,78 @@
       return y * this.canvas.main.height / (this.bounds.y_max - this.bounds.y_min);
     },
 
+    // Chart options
+    // chart type for single datasets, possible values 'bar' or 'line'
     type: 'bar',
 
+    // aspect ratio of the chart area excluding legends but including labels
+    // aspectRatio is a number representing the width / height
     aspectRatio: 16 / 9,
 
+    // These parameters represent added padding after the last data point
+    // They are in units of steps, which is the distance between original
+    // tick marks, given that no ticks have been removed to account for
+    // overlapping labels
     stepsToExtendYAxis: 0.95,
     stepsToExtendXAxis: 0.95,
 
-    gridStrokeColor: "rgba(0,0,0,0.06)",
-    gridStrokeWidth: 1,
+    // Show the grid line in the main chart area
     gridShowLines: true,
+    // Width grid lines is px
+    gridStrokeWidth: 1,
+    // Color of grid lines
+    gridStrokeColor: "rgba(0,0,0,0.06)",
 
+    // Color of axes
     axesStrokeColor: "rgba(0,0,0,0.15)",
+    // Width of axes in px
     axesStrokeWidth: 1,
+    // CSS Font family of axes' labels
     axesFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    // Font size of axes' labels
     axesFontSize: 12,
+    // Font color of axes' labels
     axesFontColor: "rgba(0,0,0,0.7)",
+    // Always display x = 0 ?
     xAxisLowerBoundIsZero: false,
+    // Always display y = 0 ?
     yAxisLowerBoundIsZero: false,
 
+    // Line chart options
+    // The radius of each point in px
     pointRadius: 3.8,
+    // The border around each point, width in px
     pointStrokeWidth: 1.2,
-
+    // The line width of each line in px
     lineStrokeWidth: 2,
 
+    // Bar chart options
+    // The border around each bar, width in px
     barStrokeWidth: 2,
+    // The empty space between each bar, in unit of the horizontal distance
+    // between the centers of adjacent bars
     barSpacing: 0.1,
 
+    // Tooltip Options
+    // Displacement of tooltip window from highlighted points in px
     tooltipOffset: 10,
+    // CSS font family of tooltip text
     tooltipFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    // Color of tooltip text
     tooltipFontColor: "rgba(255,255,255,1)",
+    // Font size of tooltip text in px
     tooltipFontSize: 15,
+    // Font weight of tooltip text
     tooltipFontWeight: 'lighter',
+    // Letter spacing of tooltip text
     tooltipLetterSpacing: 1.8,
 
+    // Legend Options
+    // Font family of legend text
     legendFontFamily: "'Helvetica Neue', 'Helvetica', 'Arial', sans-serif",
+    // Color of legend text
     legendFontColor: "rgba(0,0,0,0.7)",
+    // Font size of legend text in px
     legendFontSize: 15
   });
 
