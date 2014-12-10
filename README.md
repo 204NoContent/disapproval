@@ -238,7 +238,7 @@ labels: [
     { x: 4 },
     { x: 5 },
     { x: 6 },
-    { x: 7,  label: 'midpoint' },
+    { x: 7, label: 'midpoint' },
     { x: 8 },
     { x: 9 },
     { x: 10 },
