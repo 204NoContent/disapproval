@@ -2,30 +2,45 @@ $(document).ready(function () {
   // fake data for a single dataset
   var data = {
     labels: [
-       { x: 0,  label: 'Feb 2013'  },
-       { x: 1,  label: 'Mar 2013'  },
-       { x: 2,  label: 'Apr 2013'  },
-       { x: 3,  label: 'May 2013'  },
-       { x: 4,  label: 'Jun 2013'  },
-       { x: 5,  label: 'Jul 2013'  },
-       { x: 6,  label: 'Aug 2013'  },
+       { x: 0,  label: 'Feb 2013' },
+       { x: 1,  label: 'Mar 2013' },
+       { x: 2,  label: 'Apr 2013' },
+       { x: 3,  label: 'May 2013' },
+       { x: 4,  label: 'Jun 2013' },
+       { x: 5,  label: 'Jul 2013' },
+       { x: 6,  label: 'Aug 2013' },
        { x: 7,  label: 'Sept 2013' },
-       { x: 8,  label: 'Oct 2013'  },
-       { x: 9,  label: 'Nov 2013'  },
-       { x: 10, label: 'Dec 2013'  },
-       { x: 11, label: 'Jan 2014'  },
-       { x: 12, label: 'Feb 2014'  },
-       { x: 13, label: 'Mar 2014'  },
-       { x: 14, label: 'Apr 2014'  },
-       { x: 15, label: 'May 2014'  },
-       { x: 16, label: 'Jun 2014'  },
-       { x: 17, label: 'Jul 2014'  }
+       { x: 8,  label: 'Oct 2013' },
+       { x: 9,  label: 'Nov 2013' },
+       { x: 10, label: 'Dec 2013' },
+       { x: 11, label: 'Jan 2014' },
+       { x: 12, label: 'Feb 2014' },
+       { x: 13, label: 'Mar 2014' },
+       { x: 14, label: 'Apr 2014' },
+       { x: 15, label: 'May 2014' },
+       { x: 16, label: 'Jun 2014' },
+       { x: 17, label: 'Jul 2014' }
     ],
     datasets: [{
       name: 'Single Dataset',
-      x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
-      y: [320, 9213, 3523, 346, 332, 358, 1045, 493, 989, 542, 853, 465, 1023, 2132, 3612, 5493],
-      tooltip: ['Demo Day', 'TechCrunch Bump', 'Wearing off of Novelty', 'Trough of Sorrow', 'Trough of Sorrow', 'Trough of Sorrow', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Product Market Fit', 'Growth', 'Growth', 'Growth']
+      points: [
+        { x: 1,  y: 320,  tooltip: 'Demo Day' },
+        { x: 2,  y: 9213, tooltip: 'TechCrunch Bump' },
+        { x: 3,  y: 3523, tooltip: 'Wearing off of Novelty' },
+        { x: 4,  y: 346,  tooltip: 'Trough of Sorrow' },
+        { x: 5,  y: 332,  tooltip: 'Trough of Sorrow' },
+        { x: 6,  y: 358,  tooltip: 'Trough of Sorrow' },
+        { x: 7,  y: 1045, tooltip: 'Wiggles of False Hope' },
+        { x: 8,  y: 493,  tooltip: 'Wiggles of False Hope' },
+        { x: 9,  y: 989,  tooltip: 'Wiggles of False Hope' },
+        { x: 10, y: 542,  tooltip: 'Wiggles of False Hope' },
+        { x: 11, y: 853,  tooltip: 'Wiggles of False Hope' },
+        { x: 12, y: 465,  tooltip: 'Wiggles of False Hope' },
+        { x: 13, y: 1023, tooltip: 'Product Market Fit' },
+        { x: 14, y: 2132, tooltip: 'Growth' },
+        { x: 15, y: 3612, tooltip: 'Growth' },
+        { x: 16, y: 5493, tooltip: 'Growth' }
+      ]
     }]
   }
 
@@ -54,10 +69,12 @@ $(document).ready(function () {
     datasets: _.map(_.range(1, 21), function (i) {
       return {
         name: 'Dataset with a long name and slope of ' + i,
-        x: _.range(1, 21),
-        y: _.range(1, 20 * (i + 1), i),
-        tooltip: _.map(_.range(1, 20 * (i + 1), i), function () {
-          return 'Line that has a ridiculously long tooltip and really should be shortened with slope of ' + i;
+        points: _.map(_.range(21), function (j) {
+          return {
+            x: j,
+            y: i * j,
+            tooltip: 'Line that has a ridiculously long tooltip and really should be shortened with slope of ' + i
+          };
         })
       };
     })

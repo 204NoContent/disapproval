@@ -71,33 +71,50 @@ var data = {
     .
     .
   ],
-  datasets: [{
-    name: 'Dataset One',
-    x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    y: [1.6, 2.0, 1.75, 2.6, 1.6, 0.75, 2.0, 2.8, 1.2, 0.25],
-    tooltip: ['Launch', '', '', '?', '', '', '', '', '', 'Profit']
-  }, {
-    name: 'Dataset One',
-    x: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    y: [0.3, 20.1, 0.2, 0.1, 0.1, 0.3, 0.1, 0.4, 1.2, 4.25],
-    tooltip: ['Demo Day', 'TechCrunch bump', 'Wearing off of Novelty', 'Trough of Sorrow', 'Trough of Sorrow', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Wiggles of False Hope', 'Product Market Fit', 'Growth']
-  },
-  .
-  .
-  .
-  }]
+  datasets: [
+    {
+      name: 'Dataset One',
+      points: [
+        { x: 1,  y: 320,  tooltip: 'Demo Day' },
+        { x: 2,  y: 9213, tooltip: 'TechCrunch Bump' },
+        { x: 3,  y: 3523, tooltip: 'Wearing off of Novelty' },
+        { x: 4,  y: 346,  tooltip: 'Trough of Sorrow' },
+        { x: 5,  y: 332,  tooltip: 'Trough of Sorrow' },
+        { x: 6,  y: 358,  tooltip: 'Trough of Sorrow' },
+        { x: 7,  y: 1045, tooltip: 'Wiggles of False Hope' },
+        { x: 8,  y: 493,  tooltip: 'Wiggles of False Hope' },
+        { x: 9,  y: 989,  tooltip: 'Wiggles of False Hope' },
+        { x: 10, y: 542,  tooltip: 'Wiggles of False Hope' },
+        { x: 11, y: 853,  tooltip: 'Wiggles of False Hope' },
+        { x: 12, y: 465,  tooltip: 'Wiggles of False Hope' },
+        { x: 13, y: 1023, tooltip: 'Product Market Fit' },
+        { x: 14, y: 2132, tooltip: 'Growth' },
+        { x: 15, y: 3612, tooltip: 'Growth' },
+        { x: 16, y: 5493, tooltip: 'Growth' }
+      ]
+    }, {
+      name: 'Dataset Two',
+      points: [
+        { x: 1,  y: 1.6,  tooltip: 'Launch' },
+        { x: 2,  y: 2,0 },
+        { x: 3,  y: 1.75 },
+        { x: 4,  y: 2.6 },
+        { x: 5,  y: 1.6, tooltip: '?' },
+        { x: 6,  y: 0.75 },
+        { x: 7,  y: 2.0 },
+        { x: 8,  y: 2.8 },
+        { x: 9,  y: 1.2 },
+        { x: 10,  y: 0.25,  tooltip: 'Profit' }
+      ]
+    },
+    .
+    .
+    .
+  ]
 }
 ```
 
 , where the vertical ellipses represent more of the same objects.
-
-Pro Tip: It is OK if the tooltip array has elements that are `undefined`, so if you only wanted to label the first, the 20th and the 40th tick marks, for example, you could do it like so:
-```javascript
-var tooltip = ['First Label!'];
-tooltip[19] = '20th Label!';
-tooltip[39] = '40th Label!';
-```
-and then just set the tooltip key to that array in the appropriate Dataset Object.
 
 Aside from having properly formatted data, a DOM element must exist for each chart that you wish to render.  The DOM element will be used as a container for the chart.  The DOM element mush have non-zero width since O\_o Charts will use this width to calculate its height.
 
@@ -211,22 +228,22 @@ While the left axes can be aligned without also aligning the right most points, 
 Gotchas
 ===
 
-If you're going to use labels for the x-axis, the set of x-values of those labels must span the x-values of the dataset.  O\_o uses these x-values as indicators of where to draw tick marks and grid lines.  It's perfectly fine if there x-values of the labels are outside the range of data x-values, as long as it spans the data x-values.  For example, if you only wanted a label in the middle of the dataset that says 'midpoint', and the x-value of that label corresponds to the number 6, for a dataset that ranged from 0.4 to 12.6, you would still have to specify all the appropriate label x-values, i.e.
+If you're going to use labels for the x-axis, the set of x-values of those labels must span the x-values of the dataset.  O\_o uses these x-values as indicators of where to draw tick marks and grid lines.  It's perfectly fine if there are labels with x-values that fall outside the range of data x-values, as long as the label x-values span the data x-values.  For example, if you only wanted a label in the middle of the dataset that says 'midpoint', and the x-value of that label corresponds to the number 7, for a dataset that ranged from 0.4 to 12.6, you would still have to specify all the appropriate label x-values, i.e.
 
 ```javascript
 labels: [
-    { x: 0,  label: '' },
-    { x: 1,  label: '' },
-    { x: 3,  label: '' },
-    { x: 4,  label: '' },
-    { x: 5,  label: '' },
-    { x: 6,  label: 'midpoint' },
-    { x: 7,  label: '' },
-    { x: 8,  label: '' },
-    { x: 9,  label: '' },
-    { x: 10, label: '' },
-    { x: 11, label: '' },
-    { x: 12, label: '' },
-    { x: 13, label: '' }
+    { x: 0 },
+    { x: 1 },
+    { x: 3 },
+    { x: 4 },
+    { x: 5 },
+    { x: 6 },
+    { x: 7,  label: 'midpoint' },
+    { x: 8 },
+    { x: 9 },
+    { x: 10 },
+    { x: 11 },
+    { x: 12 },
+    { x: 13 }
   ]
 ```

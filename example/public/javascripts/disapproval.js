@@ -1149,14 +1149,7 @@
       this.labels = data.labels;
       var color_palette = data.datasets.length > 10 ? color_palette_20 : color_palette_10;
       this.datasets = _.map(data.datasets, function (dataset, i) {
-        var points = _.map(dataset.x, function (x, j) {
-          return {
-            x: dataset.x[j],
-            y: dataset.y[j],
-            tooltip: dataset.tooltip[j]
-          };
-        });
-        var dataset_collection = new O_o.Collection(points);
+        var dataset_collection = new O_o.Collection(dataset.points);
         dataset_collection.name = dataset.name;
         dataset_collection.color = chartColoring(i, color_palette);
         dataset_collection.chart = this;
