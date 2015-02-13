@@ -1404,10 +1404,14 @@
 
       var height;
       if (label_width / 2 > first_x_tick_x_offset || label_width > step_width || label_width > step_width * (0.5 + this.stepsToExtendXAxis)) {
-        var min_label_area_width = this.stepsToExtendXAxis < step_width ? step_width * this.stepsToExtendXAxis : step_width;
-        height = Math.sqrt(Math.pow(label_width + 0.5 * this.canvas.bottom.label.height, 2) - min_label_area_width * min_label_area_width);
-        this.canvas.bottom.label.tilt = Math.acos((min_label_area_width - 0.75 * this.canvas.bottom.label.height) / label_width) / 2 / Math.PI * 360;
-        if (this.canvas.bottom.label.tilt > 90) this.canvas.bottom.label.tilt = 90;
+        var min_label_area_width = step_width * this.stepsToExtendXAxis < step_width ? step_width * this.stepsToExtendXAxis : step_width;
+        if (label_width <= min_label_area_width) {
+          height = this.canvas.bottom.label.height;
+        } else {
+          this.canvas.bottom.label.tilt = Math.acos((min_label_area_width - Math.sqrt(0.5) * this.canvas.bottom.label.height) / label_width) / 2 / Math.PI * 360;
+          if (this.canvas.bottom.label.tilt > 90) this.canvas.bottom.label.tilt = 90;
+          height = label_width * Math.sin(this.canvas.bottom.label.tilt / 360 * 2 * Math.PI);
+        }
       } else {
         height = this.canvas.bottom.label.height;
       }
