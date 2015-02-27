@@ -1,7 +1,7 @@
 O_o Charts (Disapproval Charts)
 ===
 
-Simple SVG charting for the browser.
+Simple SVG charts for the browser.
 
 O\_o Charts plots single and multiple datasets as a line or bar chart as appropriate.  O\_o Charts is an opinionated library and was created to alleviate some common frustrations.  Note that O\_o Charts does not support animation by design, so if you're looking for animated plots, it is best to look elsewhere.
 
@@ -228,7 +228,7 @@ While the left axes can be aligned without also aligning the right most points, 
 Gotchas
 ===
 
-If you're going to use labels for the x-axis, the set of x-values of those labels must span the x-values of the dataset.  O\_o uses these x-values as indicators of where to draw tick marks and grid lines.  It's perfectly fine if there are labels with x-values that fall outside the range of data x-values, as long as the label x-values span the data x-values.  For example, if you only wanted a label in the middle of the dataset that says 'midpoint', and the x-value of that label corresponds to the number 7, for a dataset that ranged from 0.4 to 12.6, you would still have to specify all the appropriate label x-values, i.e.
+If you're going to use labels for the x-axis, the set of x-values of those labels must span the x-values of the dataset.  O\_o uses these x-values as indicators of where to draw tick marks and grid lines.  It's perfectly fine if there are labels with x-values that fall outside the range of data x-values, as long as the label x-values span the data x-values.  For example, if you only wanted a label in the middle of the dataset that says 'midpoint', and the x-value of that label corresponds to the number 7, for a dataset that ranged from 0.4 to 12.6, you would still have to specify all the appropriate label x-values, e.g.
 
 ```javascript
 labels: [
