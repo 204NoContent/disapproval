@@ -59,4 +59,30 @@ $(document).ready(function () {
     yAxisLowerBoundIsZero: true
   });
 
+  // fake data for multiple datasets
+  var otherData = {
+    labels: _.map(_.range(-1, 22), function (i) {
+      return {
+        x: i,
+        label: 'x label that is very long: ' + i
+      };
+    }),
+    datasets: _.map(_.range(1, 21), function (i) {
+      return {
+        name: 'Dataset with a long name and slope of ' + i,
+        points: _.map(_.range(21), function (j) {
+          return {
+            x: j,
+            y: i * j,
+            tooltip: 'Line that has a ridiculously long tooltip and really should be shortened with slope of ' + i
+          };
+        })
+      };
+    })
+  };
+
+  var chart3 = new O_o.Chart(otherData, {
+    container: '#chart-container-3'
+  });
+
 });
