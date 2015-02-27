@@ -74,7 +74,7 @@ $(document).ready(function () {
           return {
             x: j,
             y: i * j,
-            tooltip: 'Line with slope of ' + i
+            tooltip: 'Tooltip for a line with slope of ' + i
           };
         })
       };
