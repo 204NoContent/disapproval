@@ -64,17 +64,17 @@ $(document).ready(function () {
     labels: _.map(_.range(-1, 22), function (i) {
       return {
         x: i,
-        label: 'x label that is very long: ' + i
+        label: 'x label at x = ' + i
       };
     }),
     datasets: _.map(_.range(1, 21), function (i) {
       return {
-        name: 'Dataset with a long name and slope of ' + i,
+        name: 'Dataset with a slope of ' + i,
         points: _.map(_.range(21), function (j) {
           return {
             x: j,
             y: i * j,
-            tooltip: 'Line that has a ridiculously long tooltip and really should be shortened with slope of ' + i
+            tooltip: 'Line with slope of ' + i
           };
         })
       };
