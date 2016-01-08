@@ -62,9 +62,9 @@ Point Object
 
 ```javascript
 {
-    x: Number that represents the x-coordinates,
-    y: Number that represents the x-coordinates,
-    tooltip: String to display before the y-value on mouse hover.  NOTE: the y-value of a point will automatically show up in the tooltip, no need to include it here.
+    x: Number that represents the x-coordinate,
+    y: Number that represents the y-coordinate,
+    tooltip: String to display along with the y-value on mouse hover.  NOTE: the y-value of a point will automatically show up in the tooltip, no need to include it here.
 }
 ```
 
