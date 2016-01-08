@@ -1,10 +1,10 @@
 //   Disapproval.js 0.1.0
 //   (c) 2014 Aaron O'Connell, 42Floors
-// 
+//
 //   with lots of the internals taken from Backbone.js
 //   (c) 2010-2014 Jeremy Ashkenas, DocumentCloud and Investigative Reporters & Editors
 //   http://backbonejs.org
-// 
+//
 //   Disapproval may be freely distributed under the MIT license.
 
 (function (root, factory) {
@@ -1512,7 +1512,7 @@
       this.$el.append(new LeftView({ model: this }).$el);
       this.$el.append(new BottomView({ model: this }).$el);
       this.$el.append(new MainView({ model: this }).$el);
-      this.tooltipCollection.$container = $('<div>', { class: 'tooltip container' }).css({
+      this.tooltipCollection.$container = $('<div>', { class: 'disapproval-tooltip disapproval-container' }).css({
         position: 'absolute',
         'border-radius': 3,
         'background-color': 'rgba(0,0,0,0.8)',
@@ -1540,7 +1540,7 @@
 
     _triggerMouseleave: function (event) {
       var currentEl = event.toElement || event.relatedTarget;
-      if (!$(currentEl).hasClass('tooltip')) this.trigger('mouseleave');
+      if (!$(currentEl).hasClass('disapproval-tooltip')) this.trigger('mouseleave');
     },
 
     // public methods
@@ -1670,7 +1670,7 @@
     legendFontSize: 15
   });
 
-  // LeftView 
+  // LeftView
   // -------------------
 
   // A view extention for rendering the y-axis and labels
@@ -2197,7 +2197,7 @@
 
   var TooltipView = O_o.View.extend({
     tagName: 'ul',
-    className: 'tooltip list',
+    className: 'disapproval-tooltip list',
 
     events: {
       'mousemove': 'triggerMousemove',
@@ -2302,7 +2302,7 @@
 
   var TooltipItemView = O_o.View.extend({
      tagName: 'li',
-     className: 'tooltip item',
+     className: 'disapproval-tooltip item',
 
     initialize: function () {
       this.chart = this.model.collection.chart;
@@ -2315,7 +2315,7 @@
     },
 
     render: function () {
-      this.$el.append($('<div>', { class: 'tooltip item-color' }).css({
+      this.$el.append($('<div>', { class: 'disapproval-tooltip item-color' }).css({
         position: 'absolute',
         width: 8,
         height: 8,
@@ -2323,7 +2323,7 @@
         'background-color': this.model.collection.color.lineStrokeColor
       }));
 
-      var tooltip_item = $('<div>', { class: 'tooltip item-text' });
+      var tooltip_item = $('<div>', { class: 'disapproval-tooltip item-text' });
       var text = this.model.get('y');
       if (this.model.get('tooltip')) {
         text = this.model.get('tooltip') + ': ' + text;

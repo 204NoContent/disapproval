@@ -53,10 +53,19 @@ Dataset Object
 ```javascript
 {
     name: String the references the dataset to be used as on identifier in the Legend if applicable,
-    x: Array of Numbers representing the x-coordinates of successive points,
-    y: Array of Numbers, equal in length to the array of x-coordinates, that represents the y-coordinates of successive points,
-    tooltip: Array of Strings to assigned to successive points to display on mouse hover.  NOTE: the y-value of a point will automatically show up in the tooltip, no need to include it here.
-  }
+    points: Array of Point Objects
+}
+```
+
+Point Object
+---
+
+```javascript
+{
+    x: Number that represents the x-coordinates,
+    y: Number that represents the x-coordinates,
+    tooltip: String to display before the y-value on mouse hover.  NOTE: the y-value of a point will automatically show up in the tooltip, no need to include it here.
+}
 ```
 
 For example, the data could look something like:
