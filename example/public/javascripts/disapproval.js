@@ -1514,6 +1514,7 @@
       this.$el.append(new MainView({ model: this }).$el);
       this.tooltipCollection.$container = $('<div>', { class: 'disapproval-tooltip disapproval-container' }).css({
         position: 'absolute',
+        'z-index': 1000000,
         'border-radius': 3,
         'background-color': 'rgba(0,0,0,0.8)',
         '-webkit-box-shadow': '0px 1px 2px rgba(0,0,0,0.2)',
