@@ -2385,6 +2385,7 @@
           collection: dataset
         });
 
+        this.$el.html('');
         this.$el.append(legend_item_view.$el);
 
         // add each legend text to temp div
