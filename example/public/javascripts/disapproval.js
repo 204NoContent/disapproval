@@ -1551,6 +1551,7 @@
       all_charts = _.without(all_charts, this);
       this.trigger('remove'); // for legend
       O_o.View.prototype.remove.call(this);
+      this.$chart_container.remove();
     },
 
     reset: function (data, options) {
