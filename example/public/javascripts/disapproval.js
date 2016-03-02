@@ -1549,6 +1549,7 @@
     // also remove this from the collection of all charts when a chart is removed
     remove: function () {
       all_charts = _.without(all_charts, this);
+      this.trigger('remove'); // for legend
       O_o.View.prototype.remove.call(this);
     },
 
@@ -2307,7 +2308,7 @@
 
     initialize: function () {
       this.chart = this.model.collection.chart;
-      this.listenTo(this.model, 'remove', this.remove)
+      this.listenTo(this.model, 'remove', this.remove);
       this.render();
       this.$el.css({
         margin: 0,
@@ -2366,6 +2367,7 @@
       this.listenTo(O_o, 'render', this.applyCss);
       this.listenTo(O_o, 'shrink', this.releaseWidth);
       this.listenTo(this.model, 'render_legend', this.render);
+      this.listenTo(this.model, 'remove', this.remove);
       this.createToggleIcon();
       this.render();
     },
