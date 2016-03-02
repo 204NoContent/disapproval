@@ -2374,6 +2374,7 @@
     },
 
     render: function () {
+      this.$el.html('');
       // temp ul to contain items in order to figure out max width
       var $temp_div = $('<div>').css({
         visibility: 'hidden',
@@ -2385,7 +2386,6 @@
           collection: dataset
         });
 
-        this.$el.html('');
         this.$el.append(legend_item_view.$el);
 
         // add each legend text to temp div
