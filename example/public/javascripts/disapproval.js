@@ -1068,6 +1068,9 @@
   // Store a collection of all charts created
   var all_charts = [];
 
+  // callback to proxy mouse move to all charts
+  var mouseMoveHandler;
+
 
   // O_o.Chart
   // -------------------
@@ -1311,6 +1314,16 @@
         }
         // setup views after sizing has been globally determined
         this._createChartViews();
+        if (!mouseMoveHandler) {
+          mouseMoveHandler = $.proxy(function (event) {
+            if (!$(event.target).hasClass('disapproval-tooltip')) {
+              if ($(event.target).parents('.O_o-chart-container').length === 0) {
+                _.each(all_charts, function (chart) { chart.trigger('mouseleave'); }, this);
+              }
+            }
+          }, this);
+          $(document).on('mousemove', mouseMoveHandler);
+        }
       }, this), 0);
     },
 
@@ -1549,6 +1562,9 @@
     // also remove this from the collection of all charts when a chart is removed
     remove: function () {
       all_charts = _.without(all_charts, this);
+      if (all_charts.length === 0) {
+        $(document).off('mousemove', mouseMoveHandler);
+      }
       this.trigger('remove'); // for legend
       O_o.View.prototype.remove.call(this);
       this.$chart_container.remove();
@@ -2211,6 +2227,8 @@
       this.chart = this.collection.chart;
       this.listenTo(this.collection, 'add', this.renderTootltipItem);
       this.listenTo(this.collection, 'remove', this.checkTooltip);
+      this.listenTo(this.collection.chart, 'remove', this.remove);
+
       this.$el.css({
         padding: 10,
         margin: 0,
