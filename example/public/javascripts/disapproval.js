@@ -1317,7 +1317,7 @@
         if (!mouseMoveHandler) {
           mouseMoveHandler = $.proxy(function (event) {
             if (!$(event.target).hasClass('disapproval-tooltip')) {
-              if ($(event.target).parents('.O_o-chart-container').length === 0) {
+              if ($(event.target).parents('.' + this.$chart_container[0].className).length === 0) {
                 _.each(all_charts, function (chart) { chart.trigger('mouseleave'); }, this);
               }
             }
